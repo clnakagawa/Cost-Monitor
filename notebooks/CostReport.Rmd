@@ -1,0 +1,144 @@
+---
+title: "Workflow Cost Report"
+output: html_document
+date: "2026-04-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
+```
+
+```{r packages, include=FALSE}
+packages <- c("ggplot2", "circlize", "data.table", "stringr", "ComplexHeatmap")
+install.packages(setdiff(packages, rownames(installed.packages())))  
+
+library(data.table)
+library(stringr)
+library(ComplexHeatmap)
+library(circlize)
+library(ggplot2)
+```
+
+```{r load_data, include=FALSE}
+runData <- fread("~/Desktop/Projects/CostMonitor/data/workflowData.tsv")
+runData <- runData[entityType == "sample"]
+runData <- runData[, c("workflow", "workflowId", "sample", "cost", "costType", "status", "statusLastChangedDate")]
+runData <- runData[cost != "N/A"]
+runData[, cost := as.numeric(cost)]
+```
+
+```{r prep_data, include=FALSE}
+# cost per sample/workflow
+costSampWf <- runData[, .(total_cost = sum(as.numeric(cost))), by = c("workflow", "sample")]
+costSamp <- costSampWf[, .(total_cost = sum(total_cost)), by = sample]
+costWf <- costSampWf[, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost), total_cost = sum(total_cost)), by = workflow]
+
+statusTable <- dcast(
+  unique(runData[order(status, decreasing = TRUE)], 
+         by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
+  sample ~ workflow,
+  value.var = "status"
+)
+
+wfCols <- colnames(statusTable)[-1]
+statusTable$progress <- rowSums(statusTable[,-1], na.rm = TRUE)
+setorderv(statusTable, c("progress", wfCols), order = -1)
+
+invStatus <- copy(statusTable)
+invStatus[, (wfCols) := lapply(.SD, function(col) as.integer(col == 0)), .SDcols = wfCols]
+statusSumm <- rbind(colSums(statusTable[, -c("sample", "progress")], na.rm = TRUE),
+                    colSums(invStatus[, -c("sample", "progress")], na.rm = TRUE))
+rownames(statusSumm) <- c("Success", "Fail")
+
+completeSamples <- statusTable[progress == length(wfCols)]$sample 
+fullAvg <- mean(costSamp[sample %in% completeSamples]$total_cost)
+fullSD <- sd(costSamp[sample %in% completeSamples]$total_cost)
+```
+
+## Current Sample Status
+
+```{r progress_heatmap, fig.height = 10}
+mapTable <- statusTable
+mapTable[, (wfCols) := lapply(.SD, function(col) fifelse(is.na(col), 1, col + 2)), .SDcols = wfCols]
+
+pal <- colorRampPalette(c("skyblue", "gray", "red", "green"))(4)
+colors = structure(pal, names = c("0", "1", "2", "3"))
+setorderv(mapTable, wfCols, order = -1)
+
+Heatmap(mapTable[,-c("sample", "progress")], 
+        width = unit(15, "mm") * ncol(statusTable),
+        height = unit(12, "cm"),
+        col = colors,
+        cluster_columns = FALSE,
+        cluster_rows = FALSE,
+        column_names_side = "top",
+        column_names_rot = 45,
+        column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+        rect_gp = gpar(col = "darkgray", lwd = 0.1),
+        border_gp = gpar(col = "black", lwd = 0.2),
+        heatmap_legend_param = list(
+          title = "Status",
+          at = 0:3,
+          color_bar = "discrete",
+          labels = c("G2C processed", "not started", "failed", "complete"),
+          labels_gp = gpar(fontsize = 10),
+          title_gp = gpar(fontsize = 12, fontface = "bold"),
+          grid_height = unit(8, "mm"),
+          grid_width = unit(8, "mm")
+        ),
+        left_annotation = rowAnnotation(
+          title = anno_block(
+            labels = c(paste0(nrow(mapTable), "\nTotal Samples")), 
+            labels_rot = 0, 
+            width = unit(3, "cm"), 
+            gp = gpar(col = NA)
+          )
+        )
+)
+```
+
+```{r sample_status_table, echo=FALSE}
+knitr::kable(t(statusSumm))
+```
+
+## Cost Estimates
+
+```{r cost_distribution, echo=FALSE}
+ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")], 
+             costSamp[sample %in% completeSamples, .(type = "Complete"), c("total_cost")]),
+       aes(total_cost, type)) + 
+  geom_boxplot() +
+  ylab("") +
+  scale_x_continuous(limits = c(0, 15)) +
+  ggtitle("Distribution of Sample Costs ($)") +
+  theme_linedraw()
+```
+
+
+```{r workflow_dist, echo=FALSE}
+ggplot(costSampWf, aes(total_cost, workflow)) +
+  geom_boxplot() +
+  ylab("") +
+  scale_x_continuous(limits = c(0, 10)) +
+  ggtitle("Distribution of Workflow Costs per Sample ($)") +
+  theme_linedraw()
+```
+
+```{r workflow_table, echo=FALSE}
+knitr::kable(costWf[, let(avg_cost = round(avg_cost, digits = 2), sd_cost = round(sd_cost, digits = 2))])
+```
+
+```{r workflow_fail_dist, echo=FALSE}
+costSampWfFail <- runData[status == "Failed", c("workflow", "sample", "cost")]
+costSampWfFail$cost <- as.integer(ifelse(costSampWfFail$cost == "N/A", 0, costSampWfFail$cost))
+ggplot(costSampWfFail, aes(cost, workflow)) +
+  geom_boxplot() +
+  ylab("") +
+  scale_x_continuous(limits = c(0, 10)) +
+  ggtitle("Distribution of Workflow Failure Costs per Run ($)") +
+  theme_linedraw()
+
+knitr::kable(costSampWfFail[, .(avg_cost = round(mean(cost), 2), 
+                                sd_cost = round(sd(cost), 2), 
+                                total_cost = sum(cost)), by = "workflow"])
+```

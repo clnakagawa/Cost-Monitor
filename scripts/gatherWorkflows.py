@@ -46,5 +46,13 @@ def main():
     wfData['workflow'] = [inputRes[0]['inputName'].split('.')[0] for inputRes in wfData['inputResolutions']]
     wfData.to_csv("data/workflowData.tsv", sep = '\t')
 
+    # storage cost estimates
+    storage_url = f"{base_url}/workspaces/v2/{workspaceNamespace}/{workspaceName}/storageCostEstimate"
+    response = requests.get(storage_url, headers=headers, params={})
+    if response.ok:
+        pd.DataFrame(pd.json_normalize(response.json())).to_csv("data/StorageEstimate.tsv", sep = '\t')
+    else:
+        print(response.status_code, response.text)
+
 if __name__ == "__main__":
     main()

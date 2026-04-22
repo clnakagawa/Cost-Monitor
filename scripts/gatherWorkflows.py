@@ -4,10 +4,20 @@ import yaml
 import requests
 import pandas as pd
 import sys
+import google.auth
+from google.auth.transport.requests import Request
+
+def get_access_token():
+    creds, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+
+    if not creds.valid:
+        creds.refresh(Request())
+
+    return creds.token
 
 def main():
-    with open("misc/gcp_token", "r") as token_file:
-        TOKEN = token_file.read().strip()
     with open("config/config.yml", "r") as config_file: # potential here for cmd line option spec
         config = yaml.safe_load(config_file)
 
@@ -16,6 +26,7 @@ def main():
     base_url = "https://api.firecloud.org/api/"
     url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions"
 
+    TOKEN = get_access_token()
 
     headers = {
         "Authorization": f"Bearer {TOKEN}"

@@ -1,7 +1,8 @@
 ---
 title: "Workflow Cost Report"
-output: html_document
-date: "2026-04-16"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
 ---
 
 ```{r setup, include=FALSE}
@@ -55,7 +56,11 @@ fullAvg <- mean(costSamp[sample %in% completeSamples]$total_cost)
 fullSD <- sd(costSamp[sample %in% completeSamples]$total_cost)
 ```
 
-## Current Sample Status
+# Current Sample Status
+
+## Column 1
+
+### Sample Status Heatmap
 
 ```{r progress_heatmap, fig.height = 10}
 mapTable <- statusTable
@@ -97,11 +102,19 @@ Heatmap(mapTable[,-c("sample", "progress")],
 )
 ```
 
+## Column 2
+
+### Sample Status Table
+
 ```{r sample_status_table, echo=FALSE}
 knitr::kable(t(statusSumm))
 ```
 
-## Cost Estimates
+# Cost Estimates
+
+## Column 1
+
+### Cost Distribution
 
 ```{r cost_distribution, echo=FALSE}
 ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")], 
@@ -114,6 +127,7 @@ ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")],
   theme_linedraw()
 ```
 
+### Workflow Distribution
 
 ```{r workflow_dist, echo=FALSE}
 ggplot(costSampWf, aes(total_cost, workflow)) +
@@ -123,10 +137,20 @@ ggplot(costSampWf, aes(total_cost, workflow)) +
   ggtitle("Distribution of Workflow Costs per Sample ($)") +
   theme_linedraw()
 ```
+ 
+## Column 2
+
+### Workflow Table
 
 ```{r workflow_table, echo=FALSE}
 knitr::kable(costWf[, let(avg_cost = round(avg_cost, digits = 2), sd_cost = round(sd_cost, digits = 2))])
 ```
+
+# Workflow Fails
+
+## Column 1
+
+### Workflow Fail Distribution
 
 ```{r workflow_fail_dist, echo=FALSE}
 costSampWfFail <- runData[status == "Failed", c("workflow", "sample", "cost")]
@@ -137,8 +161,32 @@ ggplot(costSampWfFail, aes(cost, workflow)) +
   scale_x_continuous(limits = c(0, 10)) +
   ggtitle("Distribution of Workflow Failure Costs per Run ($)") +
   theme_linedraw()
+```
 
+## Column 2
+
+### Workflow Fail Table
+
+```{r workflow_fail_table, echo=FALSE}
 knitr::kable(costSampWfFail[, .(avg_cost = round(mean(cost), 2), 
                                 sd_cost = round(sd(cost), 2), 
                                 total_cost = sum(cost)), by = "workflow"])
+```
+
+# Storage Cost Estimates
+
+## Column 1
+
+### Storage Cost Chart
+
+```{r storage, echo=FALSE}
+storData <- fread("../data/StorageEstimate.tsv")
+sizeFactor <- 1024 ^ 4 # TB
+sizeUnit <- "TB"
+liveCost <- round(storData$`usage.live-object`[1] / sizeFactor, 2)
+softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
+pie(c(liveCost, softCost),
+    labels = c(paste0(liveCost, sizeUnit, " (Live Objects)"), 
+               paste0(softCost, sizeUnit, " (Soft-delete Objects)")),
+    main = paste0("Storage Cost (Month Total = $", storData$estimate, ")"))
 ```

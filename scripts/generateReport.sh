@@ -1,8 +1,30 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+redoData=true
+
+# cmd line options
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -h|--help)
+      echo "Usage: generateReport.sh [--redo]"
+      exit 0
+      ;;
+    -r|--redo)
+      redoData=false
+      shift 1
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
 # Terra workflow info
-python scripts/gatherWorkflows.py
+if $redoData; then
+    python scripts/gatherWorkflows.py
+fi
 
 # TODO: GCP monitoring logs
 

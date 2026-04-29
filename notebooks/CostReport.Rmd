@@ -14,6 +14,7 @@ packages <- c("ggplot2", "circlize", "data.table", "stringr", "ComplexHeatmap")
 install.packages(setdiff(packages, rownames(installed.packages())))  
 
 library(data.table)
+library(DT)
 library(stringr)
 library(ComplexHeatmap)
 library(circlize)
@@ -58,11 +59,11 @@ fullSD <- sd(costSamp[sample %in% completeSamples]$total_cost)
 
 # Current Sample Status
 
-## Column 1
+## Column 1 {data-width=400}
 
-### Sample Status Heatmap
+### Sample Status Heatmap {data-height=500}
 
-```{r progress_heatmap, fig.height = 10}
+```{r progress_heatmap, fig.height = 9, fig.width = 7}
 mapTable <- statusTable
 mapTable[, (wfCols) := lapply(.SD, function(col) fifelse(is.na(col), 1, col + 2)), .SDcols = wfCols]
 
@@ -70,7 +71,7 @@ pal <- colorRampPalette(c("skyblue", "gray", "red", "green"))(4)
 colors = structure(pal, names = c("0", "1", "2", "3"))
 setorderv(mapTable, wfCols, order = -1)
 
-Heatmap(mapTable[,-c("sample", "progress")], 
+hmap <- Heatmap(mapTable[,-c("sample", "progress")], 
         width = unit(15, "mm") * ncol(statusTable),
         height = unit(12, "cm"),
         col = colors,
@@ -100,50 +101,60 @@ Heatmap(mapTable[,-c("sample", "progress")],
           )
         )
 )
+
+draw(hmap, padding = unit(c(0,0,0,0), "mm"))
 ```
 
 ## Column 2
 
-### Sample Status Table
+### Sample Status Table {data-width=100}
 
 ```{r sample_status_table, echo=FALSE}
-knitr::kable(t(statusSumm))
+datatable(t(statusSumm))
 ```
 
 # Cost Estimates
 
-## Column 1
+## Column 1 {data-width=300}
 
 ### Cost Distribution
 
-```{r cost_distribution, echo=FALSE}
+```{r cost_distribution, echo=FALSE, fig.width = 5, fig.height = 3}
 ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")], 
              costSamp[sample %in% completeSamples, .(type = "Complete"), c("total_cost")]),
        aes(total_cost, type)) + 
   geom_boxplot() +
   ylab("") +
   scale_x_continuous(limits = c(0, 15)) +
-  ggtitle("Distribution of Sample Costs ($)") +
+  ggtitle("Sample Costs ($)") +
   theme_linedraw()
 ```
 
 ### Workflow Distribution
 
-```{r workflow_dist, echo=FALSE}
+```{r workflow_dist, echo=FALSE, fig.width = 5, fig.height = 3}
 ggplot(costSampWf, aes(total_cost, workflow)) +
   geom_boxplot() +
   ylab("") +
   scale_x_continuous(limits = c(0, 10)) +
-  ggtitle("Distribution of Workflow Costs per Sample ($)") +
+  ggtitle("Workflow Costs per Sample ($)") +
   theme_linedraw()
 ```
  
-## Column 2
+## Column 2 {data-width=500}
 
-### Workflow Table
+### All Workflows {data-height=600}
+
+```{r whole_table, echo=FALSE}
+datatable(runData[,-c(2,7)])
+```
+
+### Workflow Table {data-height=350}
 
 ```{r workflow_table, echo=FALSE}
-knitr::kable(costWf[, let(avg_cost = round(avg_cost, digits = 2), sd_cost = round(sd_cost, digits = 2))])
+datatable(costWf[, let(avg_cost = round(avg_cost, digits = 2), 
+                       sd_cost = round(sd_cost, digits = 2),
+                       total_cost = round(total_cost, digits = 2))])
 ```
 
 # Workflow Fails
@@ -168,7 +179,7 @@ ggplot(costSampWfFail, aes(cost, workflow)) +
 ### Workflow Fail Table
 
 ```{r workflow_fail_table, echo=FALSE}
-knitr::kable(costSampWfFail[, .(avg_cost = round(mean(cost), 2), 
+datatable(costSampWfFail[, .(avg_cost = round(mean(cost), 2), 
                                 sd_cost = round(sd(cost), 2), 
                                 total_cost = sum(cost)), by = "workflow"])
 ```
@@ -188,5 +199,5 @@ softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
 pie(c(liveCost, softCost),
     labels = c(paste0(liveCost, sizeUnit, " (Live Objects)"), 
                paste0(softCost, sizeUnit, " (Soft-delete Objects)")),
-    main = paste0("Storage Cost (Month Total = $", storData$estimate, ")"))
+    main = paste0("Storage Cost (Monthly Total = $", storData$estimate, ")"))
 ```

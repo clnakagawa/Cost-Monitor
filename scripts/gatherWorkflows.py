@@ -7,54 +7,72 @@ import sys
 import google.auth
 from google.auth.transport.requests import Request
 
+# current solution for authenticating for google cloud access
+# requires setup of refresh token on whatever system is running this tool
 def get_access_token():
     creds, _ = google.auth.default(
         scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
-
     if not creds.valid:
         creds.refresh(Request())
-
     return creds.token
 
+# convert submission response json to table of workflow data
+def json_to_table(sub_json):
+    subTable = pd.DataFrame(sub_json['workflows'])
+    subTable['workflowVersion'] = sub_json['methodConfigurationName']
+    subTable['sample'] = [entity['entityName'] for entity in subTable['workflowEntity']]
+    subTable['entityType'] = [entity['entityType'] for entity in subTable['workflowEntity']] # needed to split single vs multi-sample workflows
+    subTable['workflow'] = [inputRes[0]['inputName'].split('.')[0] for inputRes in subTable['inputResolutions']]
+    return(subTable)
+
+
 def main():
+    # set up general workspace variable from config file + api path
     with open("config/config.yml", "r") as config_file: # potential here for cmd line option spec
         config = yaml.safe_load(config_file)
-
     workspaceName = config['workspace']['name']
     workspaceNamespace = config['workspace']['namespace']
     base_url = "https://api.firecloud.org/api/"
-    url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions"
 
+
+    # set up refresh token authorization, headers that will be used throughout script
     TOKEN = get_access_token()
-
     headers = {
         "Authorization": f"Bearer {TOKEN}"
     }
 
+    # Get a list of all workspace submissions + metadata
+    url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions"
     response = requests.get(url, headers=headers, params={})
-
     if response.ok:
         subIds = [sub['submissionId'] for sub in response.json()]
     else:
         print(response.status_code, response.text)
         sys.exit(1)
 
-    workflows = []
+    # Get a list of all workspace method configs
+    # Used to filter workflow table to only contain current workflows
+    attr_url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs"
+    response = requests.get(attr_url, headers=headers, params={'allRepos' : 'true'})
+    if not response.ok:
+        print(response.status_code, response.text)
+    currentMethods = [method['name'] for method in response.json()]
 
+    # Process each submission individually and add data to workspace table
+    wfData = pd.DataFrame()
     for id in subIds:
         print(f"processing submission {id}") # TODO: verbosity options?
         suburl = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{id}"
         response = requests.get(suburl, headers=headers, params={})
         if response.ok:
-            workflows += response.json()['workflows']
+            respJson = response.json()
+            if any([method in respJson['methodConfigurationName'] for method in currentMethods]):
+                wfData = pd.concat([wfData, json_to_table(respJson)])
+            else:
+                print(f"submission using config {respJson['methodConfigurationName']} does not match a current workflow method")
         else:
             print(response.status_code, response.text)
-
-    wfData = pd.DataFrame(workflows)
-    wfData['sample'] = [entity['entityName'] for entity in wfData['workflowEntity']]
-    wfData['entityType'] = [entity['entityType'] for entity in wfData['workflowEntity']] # needed to split single vs multi-sample workflows
-    wfData['workflow'] = [inputRes[0]['inputName'].split('.')[0] for inputRes in wfData['inputResolutions']]
     wfData.to_csv("data/workflowData.tsv", sep = '\t')
 
     # storage cost estimates

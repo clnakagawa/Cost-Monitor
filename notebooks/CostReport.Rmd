@@ -24,7 +24,7 @@ library(ggplot2)
 ```{r load_data, include=FALSE}
 runData <- fread("~/Desktop/Projects/CostMonitor/data/workflowData.tsv")
 runData <- runData[entityType == "sample"]
-runData <- runData[, c("workflow", "workflowId", "sample", "cost", "costType", "status", "statusLastChangedDate")]
+runData <- runData[, c("workflow", "workflowId", "sample", "cost", "costType", "status", "statusLastChangedDate", "workflowVersion")]
 runData <- runData[cost != "N/A"]
 runData[, cost := as.numeric(cost)]
 ```

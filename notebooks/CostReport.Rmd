@@ -31,9 +31,9 @@ runData[, cost := as.numeric(cost)]
 
 ```{r prep_data, include=FALSE}
 # cost per sample/workflow
-costSampWf <- runData[, .(total_cost = sum(as.numeric(cost))), by = c("workflow", "sample")]
+costSampWf <- runData[, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
 costSamp <- costSampWf[, .(total_cost = sum(total_cost)), by = sample]
-costWf <- costSampWf[, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost), total_cost = sum(total_cost)), by = workflow]
+costWf <- runData[, .(total_cost = sum(cost)), by = c("workflow", "workflowVersion", "sample")][, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost), count = .N, total_cost = sum(total_cost)), by = c("workflow", "workflowVersion")][order(workflow, workflowVersion)]
 
 statusTable <- dcast(
   unique(runData[order(status, decreasing = TRUE)], 
@@ -105,18 +105,6 @@ hmap <- Heatmap(mapTable[,-c("sample", "progress")],
 draw(hmap, padding = unit(c(0,0,0,0), "mm"))
 ```
 
-## Column 2
-
-### Sample Status Table {data-width=100}
-
-```{r sample_status_table, echo=FALSE}
-datatable(t(statusSumm))
-```
-
-# Cost Estimates
-
-## Column 1 {data-width=300}
-
 ### Cost Distribution
 
 ```{r cost_distribution, echo=FALSE, fig.width = 5, fig.height = 3}
@@ -130,7 +118,27 @@ ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")],
   theme_linedraw()
 ```
 
-### Workflow Distribution
+## Column 2
+
+### Sample Status Table {data-width=100, data-height = 300}
+
+```{r sample_status_table, echo=FALSE}
+datatable(t(statusSumm))
+```
+
+### Sample Cost Table {data-height=600}
+
+```{r sample_cost_table, echo=FALSE}
+sampByWf <- dcast(costSampWf, sample ~ workflow, value.var = "total_cost")
+sampByWf[, total := round(rowSums(.SD), 2), .SDcols = colnames(sampByWf)[-1]]
+datatable(sampByWf)
+```
+
+# Workflow Cost Estimates
+
+## Column 1 {data-width=300}
+
+### Workflow Distribution {data-height=500}
 
 ```{r workflow_dist, echo=FALSE, fig.width = 5, fig.height = 3}
 ggplot(costSampWf, aes(total_cost, workflow)) +
@@ -140,48 +148,27 @@ ggplot(costSampWf, aes(total_cost, workflow)) +
   ggtitle("Workflow Costs per Sample ($)") +
   theme_linedraw()
 ```
+
+### Workflow Cost Table {data-height=500}
+ 
+```{r workflow_cost_table, echo=FALSE}
+datatable(costSampWf[, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost),
+                         total = sum(total_cost)), by = workflow]) %>% formatRound(c(2:4), 2)
+
+```
  
 ## Column 2 {data-width=500}
 
-### All Workflows {data-height=600}
+### All Workflows {data-height=500}
 
 ```{r whole_table, echo=FALSE}
 datatable(runData[,-c(2,7)])
 ```
 
-### Workflow Table {data-height=350}
+### Workflow Table {data-height=500}
 
 ```{r workflow_table, echo=FALSE}
-datatable(costWf[, let(avg_cost = round(avg_cost, digits = 2), 
-                       sd_cost = round(sd_cost, digits = 2),
-                       total_cost = round(total_cost, digits = 2))])
-```
-
-# Workflow Fails
-
-## Column 1
-
-### Workflow Fail Distribution
-
-```{r workflow_fail_dist, echo=FALSE}
-costSampWfFail <- runData[status == "Failed", c("workflow", "sample", "cost")]
-costSampWfFail$cost <- as.integer(ifelse(costSampWfFail$cost == "N/A", 0, costSampWfFail$cost))
-ggplot(costSampWfFail, aes(cost, workflow)) +
-  geom_boxplot() +
-  ylab("") +
-  scale_x_continuous(limits = c(0, 10)) +
-  ggtitle("Distribution of Workflow Failure Costs per Run ($)") +
-  theme_linedraw()
-```
-
-## Column 2
-
-### Workflow Fail Table
-
-```{r workflow_fail_table, echo=FALSE}
-datatable(costSampWfFail[, .(avg_cost = round(mean(cost), 2), 
-                                sd_cost = round(sd(cost), 2), 
-                                total_cost = sum(cost)), by = "workflow"])
+datatable(costWf) %>% formatRound(c(3,4,6), 2)
 ```
 
 # Storage Cost Estimates
@@ -190,7 +177,7 @@ datatable(costSampWfFail[, .(avg_cost = round(mean(cost), 2),
 
 ### Storage Cost Chart
 
-```{r storage, echo=FALSE}
+```{r storage, echo=FALSE, fig.height=10, fig.width=12}
 storData <- fread("../data/StorageEstimate.tsv")
 sizeFactor <- 1024 ^ 4 # TB
 sizeUnit <- "TB"

@@ -3,6 +3,7 @@ title: "Workflow Cost Report"
 output: 
   flexdashboard::flex_dashboard:
     orientation: columns
+runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
@@ -23,6 +24,7 @@ library(ggplot2)
 
 ```{r load_data, include=FALSE}
 runData <- fread("~/Desktop/Projects/CostMonitor/data/workflowData.tsv")
+batchData <- runData[entityType == "sample_set"]
 runData <- runData[entityType == "sample"]
 runData <- runData[, c("workflow", "workflowId", "sample", "cost", "costType", "status", "statusLastChangedDate", "workflowVersion")]
 runData <- runData[cost != "N/A"]
@@ -61,6 +63,14 @@ fullSD <- sd(costSamp[sample %in% completeSamples]$total_cost)
 
 ## Column 1 {data-width=400}
 
+### Workflow Display Option {data-height=100}
+```{r progress_heatmap_inputs}
+checkboxGroupInput("wfCheck", "Workflows to show", 
+                   choices = colnames(statusTable[,-c("sample", "progress")]),
+                   selected = colnames(statusTable[,-c("sample", "progress")]),
+                   inline = TRUE)
+```
+
 ### Sample Status Heatmap {data-height=500}
 
 ```{r progress_heatmap, fig.height = 9, fig.width = 7}
@@ -71,51 +81,59 @@ pal <- colorRampPalette(c("skyblue", "gray", "red", "green"))(4)
 colors = structure(pal, names = c("0", "1", "2", "3"))
 setorderv(mapTable, wfCols, order = -1)
 
-hmap <- Heatmap(mapTable[,-c("sample", "progress")], 
-        width = unit(15, "mm") * ncol(statusTable),
-        height = unit(12, "cm"),
-        col = colors,
-        cluster_columns = FALSE,
-        cluster_rows = FALSE,
-        column_names_side = "top",
-        column_names_rot = 45,
-        column_names_gp = gpar(fontsize = 10, fontface = "bold"),
-        rect_gp = gpar(col = "darkgray", lwd = 0.1),
-        border_gp = gpar(col = "black", lwd = 0.2),
-        heatmap_legend_param = list(
-          title = "Status",
-          at = 0:3,
-          color_bar = "discrete",
-          labels = c("G2C processed", "not started", "failed", "complete"),
-          labels_gp = gpar(fontsize = 10),
-          title_gp = gpar(fontsize = 12, fontface = "bold"),
-          grid_height = unit(8, "mm"),
-          grid_width = unit(8, "mm")
-        ),
-        left_annotation = rowAnnotation(
-          title = anno_block(
-            labels = c(paste0(nrow(mapTable), "\nTotal Samples")), 
-            labels_rot = 0, 
-            width = unit(3, "cm"), 
-            gp = gpar(col = NA)
+renderPlot({
+  hmap <- Heatmap(mapTable[,input$wfCheck, with = FALSE], 
+          width = unit(15, "mm") * ncol(statusTable),
+          height = unit(12, "cm"),
+          col = colors,
+          cluster_columns = FALSE,
+          cluster_rows = FALSE,
+          column_names_side = "top",
+          column_names_rot = 45,
+          column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+          rect_gp = gpar(col = "darkgray", lwd = 0.1),
+          border_gp = gpar(col = "black", lwd = 0.2),
+          heatmap_legend_param = list(
+            title = "Status",
+            at = 0:3,
+            color_bar = "discrete",
+            labels = c("G2C processed", "not started", "failed", "complete"),
+            labels_gp = gpar(fontsize = 10),
+            title_gp = gpar(fontsize = 12, fontface = "bold"),
+            grid_height = unit(8, "mm"),
+            grid_width = unit(8, "mm")
+          ),
+          left_annotation = rowAnnotation(
+            title = anno_block(
+              labels = c(paste0(nrow(mapTable), "\nTotal Samples")), 
+              labels_rot = 0, 
+              width = unit(3, "cm"), 
+              gp = gpar(col = NA)
+            )
           )
-        )
-)
+  )
+  draw(hmap, padding = unit(c(0,0,0,0), "mm")) 
+})
 
-draw(hmap, padding = unit(c(0,0,0,0), "mm"))
 ```
 
-### Cost Distribution
+### Cost Distribution {data-height=200}
 
 ```{r cost_distribution, echo=FALSE, fig.width = 5, fig.height = 3}
-ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")], 
-             costSamp[sample %in% completeSamples, .(type = "Complete"), c("total_cost")]),
-       aes(total_cost, type)) + 
-  geom_boxplot() +
-  ylab("") +
-  scale_x_continuous(limits = c(0, 15)) +
-  ggtitle("Sample Costs ($)") +
-  theme_linedraw()
+renderPlot({
+  costSamp <- costSampWf[workflow %in% input$wfCheck][, .(total_cost = sum(total_cost)), by = sample]
+  ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")], 
+               costSamp[sample %in% completeSamples, .(type = "Complete"), c("total_cost")]),
+         aes(total_cost, type)) + 
+    geom_boxplot() +
+    ylab("") +
+    xlab("Total Cost per Sample ($)") +
+    scale_x_continuous(limits = c(0, 15)) +
+    ggtitle("Sample Costs") +
+    theme_linedraw() +
+    theme(text = element_text(size=25))
+})
+
 ```
 
 ## Column 2
@@ -123,7 +141,9 @@ ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")],
 ### Sample Status Table {data-width=100, data-height = 300}
 
 ```{r sample_status_table, echo=FALSE}
-datatable(t(statusSumm))
+renderDataTable({
+  datatable(t(statusSumm[, input$wfCheck]))
+})
 ```
 
 ### Sample Cost Table {data-height=600}
@@ -131,7 +151,9 @@ datatable(t(statusSumm))
 ```{r sample_cost_table, echo=FALSE}
 sampByWf <- dcast(costSampWf, sample ~ workflow, value.var = "total_cost")
 sampByWf[, total := round(rowSums(.SD), 2), .SDcols = colnames(sampByWf)[-1]]
-datatable(sampByWf)
+renderDataTable({
+  sampByWf[,c("sample", input$wfCheck, "total"), with = FALSE]
+})
 ```
 
 # Workflow Cost Estimates
@@ -141,12 +163,15 @@ datatable(sampByWf)
 ### Workflow Distribution {data-height=500}
 
 ```{r workflow_dist, echo=FALSE, fig.width = 5, fig.height = 3}
-ggplot(costSampWf, aes(total_cost, workflow)) +
-  geom_boxplot() +
-  ylab("") +
-  scale_x_continuous(limits = c(0, 10)) +
-  ggtitle("Workflow Costs per Sample ($)") +
-  theme_linedraw()
+renderPlot({
+  ggplot(costSampWf, aes(total_cost, workflow)) +
+    geom_boxplot() +
+    ylab("") +
+    scale_x_continuous(limits = c(0, 10)) +
+    ggtitle("Workflow Costs per Sample ($)") +
+    theme_linedraw()
+})
+
 ```
 
 ### Workflow Cost Table {data-height=500}

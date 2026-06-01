@@ -214,3 +214,24 @@ pie(c(liveCost, softCost),
                paste0(softCost, sizeUnit, " (Soft-delete Objects)")),
     main = paste0("Storage Cost (Monthly Total = $", storData$estimate, ")"))
 ```
+
+# Data Usage
+
+## Column 1
+
+### Per-Workflow Use
+
+```{r log_summary, echo=FALSE}
+logData <- fread("../data/logSummary.tsv")
+
+### Plan to fix the formatting in the generating script ###
+newCols <- colnames(logData)[-1]
+logData[, avg_write := NULL]
+colnames(logData) <- newCols
+### Should not need this ###
+
+# remove min and max for now
+logData <- logData[, colnames(logData)[!(colnames(logData) %like% "min_|max_")], with = FALSE]
+
+datatable(logData[, -c(1,2,4,6)][, lapply(.SD, function(x) round(mean(x), 2)), by = c("workflow_name", "task_name")])
+```

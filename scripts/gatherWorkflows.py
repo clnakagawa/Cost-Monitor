@@ -2,6 +2,7 @@
 
 import yaml
 import requests
+from requests.adapters import HTTPAdapter, Retry
 import pandas as pd
 import sys
 import google.auth
@@ -28,6 +29,11 @@ def json_to_table(sub_json):
 
 
 def main():
+    # set up retry mechanism
+    s = requests.Session()
+    retries = Retry(total=5, backoff_factor=1, status_forcelist=[ 502, 503, 504 ])
+    s.mount('http://', HTTPAdapter(max_retries=retries))
+
     # set up general workspace variable from config file + api path
     with open("config/config.yml", "r") as config_file: # potential here for cmd line option spec
         config = yaml.safe_load(config_file)
@@ -58,6 +64,13 @@ def main():
     if not response.ok:
         print(response.status_code, response.text)
     currentMethods = [method['name'] for method in response.json()]
+
+    # Get list of workflow entities
+    entity_url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/entities/sample_set"
+    response = requests.get(entity_url, headers=headers, params={})
+    if not response.ok:
+        print(response.status_code, response.text)
+    pd.DataFrame(pd.json_normalize(response.json())).to_csv("data/workspace_entities.tsv")
 
     # Process each submission individually and add data to workspace table
     wfData = pd.DataFrame()

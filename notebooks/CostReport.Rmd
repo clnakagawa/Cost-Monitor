@@ -14,6 +14,7 @@ knitr::opts_chunk$set(echo = FALSE, warning=FALSE)
 packages <- c("ggplot2", "circlize", "data.table", "stringr", "ComplexHeatmap")
 install.packages(setdiff(packages, rownames(installed.packages())))  
 
+library(shiny)
 library(data.table)
 library(DT)
 library(stringr)
@@ -24,7 +25,7 @@ library(ggplot2)
 
 ```{r load_data, include=FALSE}
 runData <- fread("~/Desktop/Projects/CostMonitor/data/workflowData.tsv")
-batchData <- runData[entityType == "sample_set"]
+batchData <- runData[entityType == "sample_set" & !is.na(cost)]
 runData <- runData[entityType == "sample"]
 runData <- runData[, c("workflow", "workflowId", "sample", "cost", "costType", "status", "statusLastChangedDate", "workflowVersion")]
 runData <- runData[cost != "N/A"]
@@ -61,15 +62,15 @@ fullSD <- sd(costSamp[sample %in% completeSamples]$total_cost)
 
 # Current Sample Status
 
-## Column 1 {data-width=400}
+## Column {.sidebar}
 
-### Workflow Display Option {data-height=100}
 ```{r progress_heatmap_inputs}
 checkboxGroupInput("wfCheck", "Workflows to show", 
                    choices = colnames(statusTable[,-c("sample", "progress")]),
-                   selected = colnames(statusTable[,-c("sample", "progress")]),
-                   inline = TRUE)
+                   selected = colnames(statusTable[,-c("sample", "progress")]))
 ```
+
+## Column 1 {data-width=300}
 
 ### Sample Status Heatmap {data-height=500}
 
@@ -131,14 +132,14 @@ renderPlot({
     scale_x_continuous(limits = c(0, 15)) +
     ggtitle("Sample Costs") +
     theme_linedraw() +
-    theme(text = element_text(size=25))
+    theme(text = element_text(size=20))
 })
 
 ```
 
 ## Column 2
 
-### Sample Status Table {data-width=100, data-height = 300}
+### Sample Status Table {data-width=100, data-height=400}
 
 ```{r sample_status_table, echo=FALSE}
 renderDataTable({

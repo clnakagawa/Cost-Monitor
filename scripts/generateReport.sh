@@ -29,4 +29,4 @@ fi
 # TODO: GCP monitoring logs
 
 # Report generation
-Rscript -e "rmarkdown::render('notebooks/CostReport.Rmd', output_dir = 'reports/')"
+Rscript -e "rmarkdown::run('notebooks/CostReport.Rmd', shiny_args = list(launch.browser=TRUE))"

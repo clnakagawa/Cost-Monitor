@@ -21,6 +21,7 @@ library(stringr)
 library(ComplexHeatmap)
 library(circlize)
 library(ggplot2)
+library(patchwork)
 ```
 
 ```{r load_data, include=FALSE}
@@ -234,4 +235,16 @@ colnames(logData) <- newCols
 logData <- logData[, colnames(logData)[!(colnames(logData) %like% "min_|max_")], with = FALSE]
 
 datatable(logData[, -c(1,2,4,6)][, lapply(.SD, function(x) round(mean(x), 2)), by = c("workflow_name", "task_name")])
+```
+
+## Column 2
+
+### Workflow Cost Correlation
+
+```{r cost_relations, echo=FALSE}
+logCosts <- logData[runData[,c("workflowId","sample","cost")], on = c("workflow_id" = "workflowId"), nomatch=0]
+cpu <- ggplot(logCosts, aes(avg_cpu, cost)) + geom_point() + theme_minimal() + ggtitle("CPU")
+disk <- ggplot(logCosts, aes(avg_diskgb, cost)) + geom_point() + theme_minimal() + ggtitle("Disk")
+mem <- ggplot(logCosts, aes(avg_memgb, cost)) + geom_point() + theme_minimal() + ggtitle("Memory (GB)")
+cpu / disk / mem
 ```

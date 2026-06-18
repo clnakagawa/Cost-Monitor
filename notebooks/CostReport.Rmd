@@ -24,68 +24,108 @@ library(ggplot2)
 library(patchwork)
 ```
 
+# Column {.sidebar}
+
 ```{r load_data, include=FALSE}
-runData <- fread("~/Desktop/Projects/CostMonitor/data/workflowData.tsv")
-batchData <- runData[entityType == "sample_set" & !is.na(cost)]
-runData <- runData[entityType == "sample"]
-runData <- runData[, c("workflow", "workflowId", "sample", "cost", "costType", "status", "statusLastChangedDate", "workflowVersion")]
-runData <- runData[cost != "N/A"]
-runData[, cost := as.numeric(cost)]
+mainTbl <- fread("~/Desktop/Projects/CostMonitor/data/workflowData.tsv")
+mainTbl <- mainTbl[cost != "N/A"]
+mainTbl <- mainTbl[, c("workflow", "workflowId", "sample", "entityType", "cost", "costType", "status", "statusLastChangedDate", "workflowVersion")]
+mainTbl[, cost := as.numeric(cost)]
+
 ```
 
-```{r prep_data, include=FALSE}
+```{r progress_heatmap_inputs}
+selectInput("sampleType", "Entities to check",
+              choices = unique(mainTbl$entityType),
+              selected = unique(mainTbl$entityType)[1])
+renderUI({
+  req(input$sampleType)
+  wfChoices <- unique(mainTbl[entityType == input$sampleType]$workflow)
+  checkboxGroupInput("wfCheck", "Workflows to show",
+    choices = wfChoices,
+    selected = wfChoices
+  )
+})
+```
+
+```{r filter_data}
 # cost per sample/workflow
-costSampWf <- runData[, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
-costSamp <- costSampWf[, .(total_cost = sum(total_cost)), by = sample]
-costWf <- runData[, .(total_cost = sum(cost)), by = c("workflow", "workflowVersion", "sample")][, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost), count = .N, total_cost = sum(total_cost)), by = c("workflow", "workflowVersion")][order(workflow, workflowVersion)]
+costSampWf <- reactive({
+  mainTbl[entityType == input$sampleType][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+})
 
-statusTable <- dcast(
-  unique(runData[order(status, decreasing = TRUE)], 
-         by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
-  sample ~ workflow,
-  value.var = "status"
-)
+costSamp <- reactive({
+  costSampWf()[, .(total_cost = sum(total_cost)), by = sample]
+})
 
-wfCols <- colnames(statusTable)[-1]
-statusTable$progress <- rowSums(statusTable[,-1], na.rm = TRUE)
-setorderv(statusTable, c("progress", wfCols), order = -1)
+costWf <- reactive({
+  mainTbl[entityType == input$sampleType][, .(total_cost = sum(cost)), by = c("workflow", "workflowVersion", "sample")][
+    ,.(avg_cost = mean(total_cost), sd_cost = sd(total_cost), count = .N, total_cost = sum(total_cost)),
+    by = c("workflow", "workflowVersion")][order(workflow, workflowVersion)
+  ]
+})
 
-invStatus <- copy(statusTable)
-invStatus[, (wfCols) := lapply(.SD, function(col) as.integer(col == 0)), .SDcols = wfCols]
-statusSumm <- rbind(colSums(statusTable[, -c("sample", "progress")], na.rm = TRUE),
-                    colSums(invStatus[, -c("sample", "progress")], na.rm = TRUE))
-rownames(statusSumm) <- c("Success", "Fail")
+statusTable <- reactive({
+  tmpStatus <- dcast(
+    unique(mainTbl[entityType == input$sampleType][order(status, decreasing = TRUE)], 
+           by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
+    sample ~ workflow,
+    value.var = "status"
+  )
+  wfCols <- colnames(tmpStatus)[-1]
+  tmpStatus$progress <- rowSums(tmpStatus[,-1], na.rm=TRUE)
+  setorderv(tmpStatus, c("progress", wfCols), order = -1)
+  tmpStatus
+})
 
-completeSamples <- statusTable[progress == length(wfCols)]$sample 
-fullAvg <- mean(costSamp[sample %in% completeSamples]$total_cost)
-fullSD <- sd(costSamp[sample %in% completeSamples]$total_cost)
+statusSumm <- reactive({
+  tmpStatus <- statusTable()
+  invStatus <- copy(tmpStatus)
+  wfCols <- colnames(tmpStatus)[-1]
+  invStatus[, (wfCols) := lapply(.SD, function(col) as.integer(col == 0)), .SDcols = wfCols]
+  tmpSumm <- rbind(colSums(tmpStatus[, -c("sample", "progress")], na.rm=TRUE),
+                   colSums(invStatus[, -c("sample", "progress")], na.rm=TRUE))
+  rownames(tmpSumm) <- c("Success", "Fail")
+  tmpSumm
+})
+
+# completeSamples <- statusTable[progress == length(wfCols)]$sample 
+# fullAvg <- mean(costSamp[sample %in% completeSamples]$total_cost)
+# fullSD <- sd(costSamp[sample %in% completeSamples]$total_cost)
 ```
 
 # Current Sample Status
-
-## Column {.sidebar}
-
-```{r progress_heatmap_inputs}
-checkboxGroupInput("wfCheck", "Workflows to show", 
-                   choices = colnames(statusTable[,-c("sample", "progress")]),
-                   selected = colnames(statusTable[,-c("sample", "progress")]))
-```
 
 ## Column 1 {data-width=300}
 
 ### Sample Status Heatmap {data-height=500}
 
-```{r progress_heatmap, fig.height = 9, fig.width = 7}
-mapTable <- statusTable
-mapTable[, (wfCols) := lapply(.SD, function(col) fifelse(is.na(col), 1, col + 2)), .SDcols = wfCols]
-
+```{r progress_heatmap, fig.height = 9, fig.width = 7, warning=FALSE}
+# color palette for progress heatmap, no need to change
 pal <- colorRampPalette(c("skyblue", "gray", "red", "green"))(4)
 colors = structure(pal, names = c("0", "1", "2", "3"))
-setorderv(mapTable, wfCols, order = -1)
 
 renderPlot({
-  hmap <- Heatmap(mapTable[,input$wfCheck, with = FALSE], 
-          width = unit(15, "mm") * ncol(statusTable),
+  # can't run without defined list of workflows
+  req(input$wfCheck)
+
+  # subset workflow columns
+  mapTable <- as.data.table(statusTable())
+  wfCols <- intersect(input$wfCheck, colnames(mapTable))
+
+  # don't display if no columns selected
+  req(length(wfCols) > 0)
+
+  # logic for coloring table
+  mapTable[, (wfCols) := lapply(
+    .SD,
+    function(col) fifelse(is.na(col), 1, col + 2)
+  ), .SDcols = wfCols]
+  setorderv(mapTable, wfCols, order = -1)
+
+  hmap <- Heatmap(
+    mapTable[, wfCols, with = FALSE],
+          width = unit(15, "mm") * ncol(mapTable),
           height = unit(12, "cm"),
           col = colors,
           cluster_columns = FALSE,
@@ -107,14 +147,14 @@ renderPlot({
           ),
           left_annotation = rowAnnotation(
             title = anno_block(
-              labels = c(paste0(nrow(mapTable), "\nTotal Samples")), 
-              labels_rot = 0, 
-              width = unit(3, "cm"), 
+              labels = c(paste0(nrow(mapTable), "\nTotal Samples")),
+              labels_rot = 0,
+              width = unit(3, "cm"),
               gp = gpar(col = NA)
             )
           )
   )
-  draw(hmap, padding = unit(c(0,0,0,0), "mm")) 
+  draw(hmap, padding = unit(c(0,0,0,0), "mm"))
 })
 
 ```
@@ -123,10 +163,16 @@ renderPlot({
 
 ```{r cost_distribution, echo=FALSE, fig.width = 5, fig.height = 3}
 renderPlot({
-  costSamp <- costSampWf[workflow %in% input$wfCheck][, .(total_cost = sum(total_cost)), by = sample]
-  ggplot(rbind(costSamp[, .(type = "All"), c("total_cost")], 
-               costSamp[sample %in% completeSamples, .(type = "Complete"), c("total_cost")]),
-         aes(total_cost, type)) + 
+  tmpTbl <- as.data.table(costSampWf())
+  tmpTbl <- tmpTbl[workflow %in% input$wfCheck][, .(total_cost = sum(total_cost)), by = sample]
+  
+  tmpStatus <- as.data.table(statusTable())
+  
+  completeSamples <- tmpStatus[progress == ncol(tmpStatus)-2]$sample 
+  
+  ggplot(rbind(tmpTbl[, .(type = "All"), c("total_cost")],
+               tmpTbl[sample %in% completeSamples, .(type = "Complete"), c("total_cost")]),
+         aes(total_cost, type)) +
     geom_boxplot() +
     ylab("") +
     xlab("Total Cost per Sample ($)") +
@@ -135,7 +181,6 @@ renderPlot({
     theme_linedraw() +
     theme(text = element_text(size=20))
 })
-
 ```
 
 ## Column 2
@@ -144,17 +189,24 @@ renderPlot({
 
 ```{r sample_status_table, echo=FALSE}
 renderDataTable({
-  datatable(t(statusSumm[, input$wfCheck]))
+  req(input$wfCheck)
+  tmpSumm <- as.data.table(statusSumm())
+  datatable(t(tmpSumm[, input$wfCheck]))
 })
 ```
 
 ### Sample Cost Table {data-height=600}
 
 ```{r sample_cost_table, echo=FALSE}
-sampByWf <- dcast(costSampWf, sample ~ workflow, value.var = "total_cost")
-sampByWf[, total := round(rowSums(.SD), 2), .SDcols = colnames(sampByWf)[-1]]
 renderDataTable({
-  sampByWf[,c("sample", input$wfCheck, "total"), with = FALSE]
+  tmpCostTbl <- as.data.table(costSampWf())
+  wfCols <- intersect(unique(tmpCostTbl$workflow), input$wfCheck)
+  
+  req(length(wfCols) > 0)
+  
+  sampByWf <- dcast(tmpCostTbl, sample ~ workflow, value.var = "total_cost")
+  sampByWf[, total := round(rowSums(.SD), 2), .SDcols = colnames(sampByWf)[-1]]
+  sampByWf[,c("sample", wfCols, "total"), with = FALSE]
 })
 ```
 
@@ -164,9 +216,12 @@ renderDataTable({
 
 ### Workflow Distribution {data-height=500}
 
-```{r workflow_dist, echo=FALSE, fig.width = 5, fig.height = 3}
+```{r workflow_dist, echo=FALSE, fig.width = 8, fig.height = 3}
 renderPlot({
-  ggplot(costSampWf, aes(total_cost, workflow)) +
+  req(input$wfCheck)
+  tmpCostTbl <- as.data.table(costSampWf())
+  tmpCostTbl <- tmpCostTbl[workflow %in% input$wfCheck]
+  ggplot(tmpCostTbl, aes(total_cost, workflow)) +
     geom_boxplot() +
     ylab("") +
     scale_x_continuous(limits = c(0, 10)) +
@@ -177,25 +232,35 @@ renderPlot({
 ```
 
 ### Workflow Cost Table {data-height=500}
- 
-```{r workflow_cost_table, echo=FALSE}
-datatable(costSampWf[, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost),
-                         total = sum(total_cost)), by = workflow]) %>% formatRound(c(2:4), 2)
 
+```{r workflow_cost_table, echo=FALSE}
+renderDataTable({
+  req(input$wfCheck)
+  tmpCostTbl <- as.data.table(costSampWf())
+  tmpCostTbl <- tmpCostTbl[workflow %in% input$wfCheck]
+  datatable(tmpCostTbl[, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost),
+                         total = sum(total_cost)), by = workflow]) %>% formatRound(c(2:4), 2)
+})
 ```
- 
+
 ## Column 2 {data-width=500}
 
 ### All Workflows {data-height=500}
 
 ```{r whole_table, echo=FALSE}
-datatable(runData[,-c(2,7)])
+renderDataTable({
+  req(input$sampleType)
+  datatable(mainTbl[entityType == input$sampleType & workflow %in% input$wfCheck])
+})
 ```
 
 ### Workflow Table {data-height=500}
 
 ```{r workflow_table, echo=FALSE}
-datatable(costWf) %>% formatRound(c(3,4,6), 2)
+renderDataTable({
+  tmpCost <- as.data.table(costWf())[workflow %in% input$wfCheck]
+  datatable(tmpCost) %>% formatRound(c(3,4,6), 2)
+})
 ```
 
 # Storage Cost Estimates
@@ -211,7 +276,7 @@ sizeUnit <- "TB"
 liveCost <- round(storData$`usage.live-object`[1] / sizeFactor, 2)
 softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
 pie(c(liveCost, softCost),
-    labels = c(paste0(liveCost, sizeUnit, " (Live Objects)"), 
+    labels = c(paste0(liveCost, sizeUnit, " (Live Objects)"),
                paste0(softCost, sizeUnit, " (Soft-delete Objects)")),
     main = paste0("Storage Cost (Monthly Total = $", storData$estimate, ")"))
 ```
@@ -242,9 +307,11 @@ datatable(logData[, -c(1,2,4,6)][, lapply(.SD, function(x) round(mean(x), 2)), b
 ### Workflow Cost Correlation
 
 ```{r cost_relations, echo=FALSE}
-logCosts <- logData[runData[,c("workflowId","sample","cost")], on = c("workflow_id" = "workflowId"), nomatch=0]
-cpu <- ggplot(logCosts, aes(avg_cpu, cost)) + geom_point() + theme_minimal() + ggtitle("CPU")
-disk <- ggplot(logCosts, aes(avg_diskgb, cost)) + geom_point() + theme_minimal() + ggtitle("Disk")
-mem <- ggplot(logCosts, aes(avg_memgb, cost)) + geom_point() + theme_minimal() + ggtitle("Memory (GB)")
-cpu / disk / mem
+renderPlot({
+  logCosts <- logData[mainTbl[entityType == input$sampleType, c("workflowId","sample","cost")], on = c("workflow_id" = "workflowId"), nomatch=0]
+  cpu <- ggplot(logCosts, aes(avg_cpu, cost)) + geom_point() + theme_minimal() + ggtitle("CPU")
+  disk <- ggplot(logCosts, aes(avg_diskgb, cost)) + geom_point() + theme_minimal() + ggtitle("Disk")
+  mem <- ggplot(logCosts, aes(avg_memgb, cost)) + geom_point() + theme_minimal() + ggtitle("Memory (GB)")
+  cpu / disk / mem
+})
 ```

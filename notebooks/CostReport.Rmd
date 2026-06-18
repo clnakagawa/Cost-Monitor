@@ -216,17 +216,19 @@ renderDataTable({
 
 ### Workflow Distribution {data-height=500}
 
-```{r workflow_dist, echo=FALSE, fig.width = 8, fig.height = 3}
+```{r workflow_dist, echo=FALSE}
 renderPlot({
   req(input$wfCheck)
   tmpCostTbl <- as.data.table(costSampWf())
   tmpCostTbl <- tmpCostTbl[workflow %in% input$wfCheck]
+  print(tmpCostTbl)
   ggplot(tmpCostTbl, aes(total_cost, workflow)) +
     geom_boxplot() +
     ylab("") +
     scale_x_continuous(limits = c(0, 10)) +
     ggtitle("Workflow Costs per Sample ($)") +
-    theme_linedraw()
+    theme_linedraw() +
+    theme(text = element_text(size = 20))
 })
 
 ```
@@ -263,29 +265,11 @@ renderDataTable({
 })
 ```
 
-# Storage Cost Estimates
-
-## Column 1
-
-### Storage Cost Chart
-
-```{r storage, echo=FALSE, fig.height=10, fig.width=12}
-storData <- fread("../data/StorageEstimate.tsv")
-sizeFactor <- 1024 ^ 4 # TB
-sizeUnit <- "TB"
-liveCost <- round(storData$`usage.live-object`[1] / sizeFactor, 2)
-softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
-pie(c(liveCost, softCost),
-    labels = c(paste0(liveCost, sizeUnit, " (Live Objects)"),
-               paste0(softCost, sizeUnit, " (Soft-delete Objects)")),
-    main = paste0("Storage Cost (Monthly Total = $", storData$estimate, ")"))
-```
-
 # Data Usage
 
-## Column 1
+## Column 1 {data-width=400}
 
-### Per-Workflow Use
+### Per-Workflow Use {data-height=500}
 
 ```{r log_summary, echo=FALSE}
 logData <- fread("../data/logSummary.tsv")
@@ -300,6 +284,22 @@ colnames(logData) <- newCols
 logData <- logData[, colnames(logData)[!(colnames(logData) %like% "min_|max_")], with = FALSE]
 
 datatable(logData[, -c(1,2,4,6)][, lapply(.SD, function(x) round(mean(x), 2)), by = c("workflow_name", "task_name")])
+```
+
+### Storage Cost Chart {data-height=400}
+
+```{r storage, echo=FALSE, fig.height=10, fig.width=20}
+storData <- fread("../data/StorageEstimate.tsv")
+sizeFactor <- 1024 ^ 4 # TB
+sizeUnit <- "TB"
+liveCost <- round(storData$`usage.live-object`[1] / sizeFactor, 2)
+softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
+pie(c(liveCost, softCost),
+    labels = c(paste0(liveCost, sizeUnit, " (Live Objects)"),
+               paste0(softCost, sizeUnit, " (Soft-delete Objects)")),
+    main = paste0("Storage Cost (Monthly Total = $", storData$estimate, ")"),
+    cex = 2.4,
+    cex.main = 2.9)
 ```
 
 ## Column 2

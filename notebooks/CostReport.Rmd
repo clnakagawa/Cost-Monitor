@@ -14,7 +14,7 @@ library(circlize)
 library(ggplot2)
 library(patchwork)
 
-mainTbl <- fread("~/Desktop/Projects/CostMonitor/data/workflowData.tsv")
+mainTbl <- fread("../data/workflowData.tsv")
 mainTbl <- mainTbl[cost != "N/A"]
 mainTbl <- mainTbl[, c("workflow", "workflowId", "sample", "entityType", "cost", "costType", "status", "statusLastChangedDate", "workflowVersion")]
 mainTbl[, cost := as.numeric(cost)]

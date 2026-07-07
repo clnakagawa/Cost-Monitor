@@ -7,6 +7,7 @@ import pandas as pd
 import sys
 import google.auth
 from google.auth.transport.requests import Request
+from pathlib import Path
 
 # current solution for authenticating for google cloud access
 # requires setup of refresh token on whatever system is running this tool
@@ -27,7 +28,6 @@ def json_to_table(sub_json):
     subTable['workflow'] = [inputRes[0]['inputName'].split('.')[0] for inputRes in subTable['inputResolutions']]
     return(subTable)
 
-
 def main():
     # set up retry mechanism
     s = requests.Session()
@@ -35,7 +35,7 @@ def main():
     s.mount('http://', HTTPAdapter(max_retries=retries))
 
     # set up general workspace variable from config file + api path
-    with open("config/config.yml", "r") as config_file: # potential here for cmd line option spec
+    with open("../config/config.yml", "r") as config_file: # potential here for cmd line option spec
         config = yaml.safe_load(config_file)
     workspaceName = config['workspace']['name']
     workspaceNamespace = config['workspace']['namespace']
@@ -57,6 +57,14 @@ def main():
         print(response.status_code, response.text)
         sys.exit(1)
 
+    # check if processed submissions list exists
+    hasSubRecord = Path("../data/submission_list.txt").is_file()
+    if hasSubRecord:
+        # get already processed ids and remove from current list
+        with open("../data/submission_list.txt", 'r') as f:
+            procSubIds = [line.rstrip() for line in f]
+        subIds = [subId for subId in subIds if subId not in procSubIds]
+
     # Get a list of all workspace method configs
     # Used to filter workflow table to only contain current workflows
     attr_url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs"
@@ -70,7 +78,7 @@ def main():
     response = requests.get(entity_url, headers=headers, params={})
     if not response.ok:
         print(response.status_code, response.text)
-    pd.DataFrame(pd.json_normalize(response.json())).to_csv("data/workspace_entities.tsv")
+    pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/workspace_entities.tsv")
 
     # Process each submission individually and add data to workspace table
     wfData = pd.DataFrame()
@@ -86,13 +94,17 @@ def main():
                 print(f"submission using config {respJson['methodConfigurationName']} does not match a current workflow method")
         else:
             print(response.status_code, response.text)
-    wfData.to_csv("data/workflowData.tsv", sep = '\t')
+    wfData.to_csv("../data/workflowData.tsv", sep = '\t')
+
+    # If submissions are processed without error, write/append to record
+    with open("../data/submission_list.txt", 'a' if hasSubRecord else 'w') as f:
+        f.write("\n".join(subIds))
 
     # storage cost estimates
     storage_url = f"{base_url}/workspaces/v2/{workspaceNamespace}/{workspaceName}/storageCostEstimate"
     response = requests.get(storage_url, headers=headers, params={})
     if response.ok:
-        pd.DataFrame(pd.json_normalize(response.json())).to_csv("data/StorageEstimate.tsv", sep = '\t')
+        pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/StorageEstimate.tsv", sep = '\t')
     else:
         print(response.status_code, response.text)
 

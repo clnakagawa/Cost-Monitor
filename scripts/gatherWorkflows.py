@@ -29,13 +29,16 @@ def json_to_table(sub_json):
     return(subTable)
 
 def main():
+    # get config
+    config_path = sys.argv[1]
+
     # set up retry mechanism
     s = requests.Session()
     retries = Retry(total=5, backoff_factor=1, status_forcelist=[ 502, 503, 504 ])
     s.mount('http://', HTTPAdapter(max_retries=retries))
 
     # set up general workspace variable from config file + api path
-    with open("../config/config.yml", "r") as config_file: # potential here for cmd line option spec
+    with open(config_path, "r") as config_file: # potential here for cmd line option spec
         config = yaml.safe_load(config_file)
     workspaceName = config['workspace']['name']
     workspaceNamespace = config['workspace']['namespace']

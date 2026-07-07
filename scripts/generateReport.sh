@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-redoData=true
+parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
+cd "$parent_path"
+
+configPath="../config/config.yml"
 
 # cmd line options
 while [[ $# -gt 0 ]]; do
@@ -10,6 +13,10 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: generateReport.sh [--redo]"
       exit 0
       ;;
+    -c|--config)
+      shift 
+      configPath=$1
+      ;;
     *)
       echo "Unknown option: $1"
       exit 1
@@ -17,14 +24,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-parent_path=$( cd "$(dirname "${BASH_SOURCE[0]}")" ; pwd -P )
-cd "$parent_path"
-
-if [ ! -d "../data" ]; then
-  mkdir "../data"
-fi
-
-python gatherWorkflows.py
+python gatherWorkflows.py "$configPath"
 
 # Report generation
 Rscript -e "rmarkdown::run('../notebooks/CostReport.Rmd', shiny_args = list(launch.browser=TRUE))"

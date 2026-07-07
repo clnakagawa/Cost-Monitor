@@ -14,3 +14,6 @@ Rscript -e "
     }
     BiocManager::install('ComplexHeatmap')
 "
+
+mkdir ../config
+mkdir ../data

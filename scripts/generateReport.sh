@@ -16,6 +16,7 @@ while [[ $# -gt 0 ]]; do
     -c|--config)
       shift 
       configPath=$1
+      shift
       ;;
     *)
       echo "Unknown option: $1"

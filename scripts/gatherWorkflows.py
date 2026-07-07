@@ -81,7 +81,7 @@ def main():
     pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/workspace_entities.tsv")
 
     # Process each submission individually and add data to workspace table
-    wfData = pd.DataFrame()
+    wfData = pd.read_table("../data/workflowData.tsv") if hasSubRecord else pd.DataFrame()
     for id in subIds:
         print(f"processing submission {id}") # TODO: verbosity options?
         suburl = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{id}"

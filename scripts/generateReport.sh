@@ -10,7 +10,7 @@ configPath="../config/config.yml"
 while [[ $# -gt 0 ]]; do
   case $1 in
     -h|--help)
-      echo "Usage: generateReport.sh [--redo]"
+      echo "Usage: generateReport.sh [-c|--config] <optional config path>"
       exit 0
       ;;
     -c|--config)

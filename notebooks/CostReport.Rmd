@@ -262,19 +262,3 @@ renderPlot({
       cex.main = 2.9)
 })
 ```
-
-### Chart 2
-```{r}
-```
-
-
-Column 2
------------
-
-### Chart 1
-```{r}
-```
-
-### Chart 2
-```{r}
-```

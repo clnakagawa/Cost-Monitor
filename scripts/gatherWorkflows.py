@@ -9,15 +9,7 @@ import google.auth
 from google.auth.transport.requests import Request
 from pathlib import Path
 
-# current solution for authenticating for google cloud access
-# requires setup of refresh token on whatever system is running this tool
-def get_access_token():
-    creds, _ = google.auth.default(
-        scopes=["https://www.googleapis.com/auth/cloud-platform"]
-    )
-    if not creds.valid:
-        creds.refresh(Request())
-    return creds.token
+from costutils import *
 
 # convert submission response json to table of workflow data
 def json_to_table(sub_json):
@@ -44,6 +36,8 @@ def main():
     workspaceNamespace = config['workspace']['namespace']
     base_url = "https://api.firecloud.org/api/"
 
+    # make data directory for workspace if doesn't exist
+    Path("../data/" + config['workspace']['name']).mkdir(parents=True, exist_ok=True)
 
     # set up refresh token authorization, headers that will be used throughout script
     TOKEN = get_access_token()
@@ -55,16 +49,16 @@ def main():
     url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions"
     response = requests.get(url, headers=headers, params={})
     if response.ok:
-        subIds = [sub['submissionId'] for sub in response.json()]
+        subIds = [sub['submissionId'] for sub in response.json() if sub['status'] in ["Done", "Aborted"]]
     else:
         print(response.status_code, response.text)
         sys.exit(1)
 
     # check if processed submissions list exists
-    hasSubRecord = Path("../data/submission_list.txt").is_file()
+    hasSubRecord = Path("../data/" + config['workspace']['name'] + "/submission_list.txt").is_file()
     if hasSubRecord:
         # get already processed ids and remove from current list
-        with open("../data/submission_list.txt", 'r') as f:
+        with open("../data/" + config['workspace']['name'] + "/submission_list.txt", 'r') as f:
             procSubIds = [line.rstrip() for line in f]
         subIds = [subId for subId in subIds if subId not in procSubIds]
 
@@ -81,10 +75,10 @@ def main():
     response = requests.get(entity_url, headers=headers, params={})
     if not response.ok:
         print(response.status_code, response.text)
-    pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/workspace_entities.tsv")
+    pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/" + config['workspace']['name'] + "/workspace_entities.tsv")
 
     # Process each submission individually and add data to workspace table
-    wfData = pd.read_table("../data/workflowData.tsv") if hasSubRecord else pd.DataFrame()
+    wfData = pd.read_table("../data/" + config['workspace']['name'] + "/workflowData.tsv") if hasSubRecord else pd.DataFrame()
     for id in subIds:
         print(f"processing submission {id}") # TODO: verbosity options?
         suburl = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{id}"
@@ -97,17 +91,17 @@ def main():
                 print(f"submission using config {respJson['methodConfigurationName']} does not match a current workflow method")
         else:
             print(response.status_code, response.text)
-    wfData.to_csv("../data/workflowData.tsv", sep = '\t')
+    wfData.to_csv("../data/" + config['workspace']['name'] + "/workflowData.tsv", sep = '\t')
 
     # If submissions are processed without error, write/append to record
-    with open("../data/submission_list.txt", 'a' if hasSubRecord else 'w') as f:
+    with open("../data/" + config['workspace']['name'] + "/submission_list.txt", 'a' if hasSubRecord else 'w') as f:
         f.write("\n".join(subIds))
 
     # storage cost estimates
     storage_url = f"{base_url}/workspaces/v2/{workspaceNamespace}/{workspaceName}/storageCostEstimate"
     response = requests.get(storage_url, headers=headers, params={})
     if response.ok:
-        pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/StorageEstimate.tsv", sep = '\t')
+        pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/" + config['workspace']['name'] + "/StorageEstimate.tsv", sep = '\t')
     else:
         print(response.status_code, response.text)
 

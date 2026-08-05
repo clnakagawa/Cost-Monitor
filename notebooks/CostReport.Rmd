@@ -14,26 +14,43 @@ library(circlize)
 library(ggplot2)
 library(patchwork)
 
-mainTbl <- fread("../data/workflowData.tsv")
-mainTbl <- mainTbl[cost != "N/A"]
-mainTbl <- mainTbl[, c("workflow", "workflowId", "sample", "entityType", "cost", "costType", "status", "statusLastChangedDate", "workflowVersion")]
-mainTbl[, cost := as.numeric(cost)]
+# mainTbl <- function(wsName) {
+#   fread(paste0("../data/", wsName, "/workflowData.tsv"))[
+#     cost != "N/A",
+#     .(workflow, workflowId, sample, entityType, cost = as.numeric(cost), costType, status,
+#       statusLastChangedDate, workflowVersion)
+#   ]
+# }
 ```
 
-Sidebar {.sidebar}
-=====================================
+# Sidebar {.sidebar}
 
 ```{r progress_heatmap_inputs}
-selectInput("sampleType", "Entities to check",
-              choices = unique(mainTbl$entityType),
-              selected = unique(mainTbl$entityType)[1])
+# select workspace, no need renderUI
+selectInput("workspace", "Select Terra Workspace",
+            choices = unique(list.files("../data/")))
 
-# 1. Initialize the checkboxGroup empty so it doesn't crash on boot
+mainTbl <- reactive({
+  fread(paste0("../data/", input$workspace, "/workflowData.tsv"))[
+    cost != "N/A",
+    .(workflow, workflowId, sample, entityType, cost = as.numeric(cost), costType, status,
+      statusLastChangedDate, workflowVersion)
+  ]
+})
+
+selectInput("sampleType", "Entities to check", choices = NULL)
 checkboxGroupInput("wfCheck", "Workflows to show", choices = NULL)
+
+# need renderUI bc depends on selected workspace
+observeEvent(input$workspace, {
+  updateSelectInput(getDefaultReactiveDomain(), "sampleType",
+                    choices = unique(mainTbl()$entityType),
+                    selected = unique(mainTbl()$entityType)[1])
+})
 
 # 2. Use a reactive observer to update the choices seamlessly whenever sampleType changes
 observeEvent(input$sampleType, {
-  wfChoices <- unique(mainTbl[entityType == input$sampleType]$workflow)
+  wfChoices <- unique(mainTbl()[entityType == input$sampleType]$workflow)
   updateCheckboxGroupInput(getDefaultReactiveDomain(), "wfCheck",
     choices = wfChoices,
     selected = wfChoices
@@ -41,13 +58,11 @@ observeEvent(input$sampleType, {
 })
 ```
 
-Current Sample Status
-=====================================
+# Current Sample Status
 
-Column 1 {data-width=300}
---------
+## Column 1 {data-width="300"}
 
-### Sample Status Heatmap {data-height=600}
+### Sample Status Heatmap {data-height="600"}
 
 ```{r progress_heatmap}
 # color palette for progress heatmap, no need to change
@@ -57,7 +72,7 @@ colors = structure(pal, names = c("0", "1", "2", "3"))
 renderPlot({
   req(input$wfCheck)
   mapTable <- dcast(
-    unique(mainTbl[entityType == input$sampleType & workflow %in% input$wfCheck][order(status, decreasing = TRUE)], by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
+    unique(mainTbl()[entityType == input$sampleType & workflow %in% input$wfCheck][order(status, decreasing = TRUE)], by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
     sample ~ workflow,
     value.var = "status"
   )
@@ -106,21 +121,21 @@ renderPlot({
 })
 ```
 
-### Cost Distribution {data-height=400}
+### Cost Distribution {data-height="400"}
 
 ```{r}
 renderPlot({
-  tmpTbl <- mainTbl[entityType == input$sampleType][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+  tmpTbl <- mainTbl()[entityType == input$sampleType][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
   tmpTbl <- tmpTbl[workflow %in% input$wfCheck][, .(total_cost = sum(total_cost)), by = sample]
-  
-  sampStatus <- unique(mainTbl[workflow %in% input$wfCheck & 
+
+  sampStatus <- unique(mainTbl()[workflow %in% input$wfCheck &
                                  entityType == input$sampleType &
                                  status == "Succeeded", c("workflow", "sample")])
   numWorkflows <- uniqueN(sampStatus$workflow)
   sampStatus <- sampStatus[,.(count = .N), by = sample]
   completeSamples <- sampStatus[count == numWorkflows]$sample
-  
-  
+
+
   ggplot(rbind(tmpTbl[, .(type = "All"), c("total_cost")],
                tmpTbl[sample %in% completeSamples, .(type = "Complete"), c("total_cost")]),
          aes(total_cost, type)) +
@@ -134,8 +149,7 @@ renderPlot({
 })
 ```
 
-Column 2 {data-width=700}
---------
+## Column 2 {data-width="700"}
 
 ### Sample Status Table
 
@@ -144,7 +158,7 @@ renderDataTable({
   req(input$wfCheck)
 
   tmpStatus <- dcast(
-    unique(mainTbl[entityType == input$sampleType][order(status, decreasing = TRUE)], 
+    unique(mainTbl()[entityType == input$sampleType][order(status, decreasing = TRUE)],
            by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
     sample ~ workflow,
     value.var = "status"
@@ -167,28 +181,26 @@ renderDataTable({
 ```{r}
 renderDataTable({
   req(input$wfCheck)
-  
-  tmpCostTbl <- mainTbl[entityType == input$sampleType & workflow %in% input$wfCheck][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
-  
-  
+
+  tmpCostTbl <- mainTbl()[entityType == input$sampleType & workflow %in% input$wfCheck][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+
+
   sampByWf <- dcast(tmpCostTbl, sample ~ workflow, value.var = "total_cost")
   sampByWf[, total := round(rowSums(.SD, na.rm = TRUE), 2), .SDcols = colnames(sampByWf)[-1]]
   sampByWf
 })
 ```
 
-Workflow Cost Estimates
-=====================================
+# Workflow Cost Estimates
 
-Column 1 {data-width=350}
---------
+## Column 1 {data-width="350"}
 
 ### Workflow Distribution
 
 ```{r workflow_dist, echo=FALSE}
 renderPlot({
   req(input$wfCheck)
-  tmpCostTbl <- mainTbl[entityType == input$sampleType & workflow %in% input$wfCheck][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+  tmpCostTbl <- mainTbl()[entityType == input$sampleType & workflow %in% input$wfCheck][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
   tmpCostTbl <- tmpCostTbl[workflow %in% input$wfCheck]
 
   ggplot(tmpCostTbl, aes(total_cost, workflow)) +
@@ -206,7 +218,7 @@ renderPlot({
 ```{r}
 renderDataTable({
   req(input$wfCheck)
-  tmpCostTbl <- mainTbl[entityType == input$sampleType & workflow %in% input$wfCheck][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+  tmpCostTbl <- mainTbl()[entityType == input$sampleType & workflow %in% input$wfCheck][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
   tmpCostTbl <- tmpCostTbl[workflow %in% input$wfCheck]
   datatable(tmpCostTbl[, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost),
                          total = sum(total_cost)), by = workflow]) %>% formatRound(c(2:4), 2)
@@ -214,16 +226,14 @@ renderDataTable({
 
 ```
 
-Column 2 {data-width=650}
---------
+## Column 2 {data-width="650"}
 
-
-### All Workflows 
+### All Workflows
 
 ```{r whole_table, echo=FALSE}
 renderDataTable({
   req(input$sampleType)
-  datatable(mainTbl[entityType == input$sampleType & workflow %in% input$wfCheck])
+  datatable(mainTbl()[entityType == input$sampleType & workflow %in% input$wfCheck])
 })
 ```
 
@@ -231,7 +241,7 @@ renderDataTable({
 
 ```{r workflow_table, echo=FALSE}
 renderDataTable({
-  tmpCost <-   mainTbl[entityType == input$sampleType & workflow %in% input$wfCheck][, .(total_cost = sum(cost)), by = c("workflow", "workflowVersion", "sample")][
+  tmpCost <-   mainTbl()[entityType == input$sampleType & workflow %in% input$wfCheck][, .(total_cost = sum(cost)), by = c("workflow", "workflowVersion", "sample")][
     ,.(avg_cost = mean(total_cost), sd_cost = sd(total_cost), count = .N, total_cost = sum(total_cost)),
     by = c("workflow", "workflowVersion")][order(workflow, workflowVersion)
   ]
@@ -239,13 +249,12 @@ renderDataTable({
 })
 ```
 
-Data Usage
-===========
+# Data Usage
 
-Column 1
------------
+## Column 1
 
 ### Storage Cost Estimate
+
 ```{r}
 storData <- fread("../data/StorageEstimate.tsv")
 sizeFactor <- 1024 ^ 4 # TB

@@ -2,6 +2,7 @@
 
 import pandas as pd
 import seaborn as sns
+import matplotlib.pyplot as plt
 import sys
 
 def load_flagstat(flgPath):
@@ -22,11 +23,36 @@ def main():
     data = pd.read_table(entityTbl)
 
     summTbl = pd.concat([load_flagstat(path) for path in data['flagstat'] if isinstance(path, str) and "flagstat" in path])
-    print(summTbl)
 
-    boxplt = sns.boxplot(x="variable", y="value", data=pd.melt(summTbl))
-    boxplt.get_figure().savefig("../flagstat_boxplot.png")
+    denom = summTbl["total_pass"] + summTbl["total_fail"]
+    cols = list(summTbl.columns.difference(["total_pass", "total_fail"]))
+    summTbl[cols] = summTbl[cols].div(denom, axis=0)
 
+    summTblPass = summTbl.iloc[:,0:16]
+    summTblFail = summTbl.iloc[:,16:32]
+    print(summTbl.columns)
+
+    print(summTblPass)
+    print(summTblFail)
+
+
+    # QC passed reads
+    summTblPass = pd.melt(summTblPass, var_name="variable", value_name="value")
+    gpass = sns.FacetGrid(summTblPass, row = "variable",
+                      height=1.2, aspect=5, sharex=False)
+    gpass.map(sns.boxplot, "value")
+    plt.savefig("../plots/flagstat_pass_boxplot.png")
+    plt.clf()
+
+    # QC Failed reads
+    summTblFail = pd.melt(summTblFail, var_name="variable", value_name="value")
+    gfail = sns.FacetGrid(summTblFail, row = "variable",
+                          height=1.2, aspect=5, sharex=False)
+    gfail.map(sns.boxplot, "value")
+    plt.savefig("../plots/flagstat_fail_boxplot.png")
+
+    #TODO Filter and create lists to remove
+    # Integrate with API to edit sets? Not sure
 
 
 if __name__ == "__main__":

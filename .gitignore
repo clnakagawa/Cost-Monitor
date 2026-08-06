@@ -6,3 +6,4 @@ notebooks/CostReport.html
 .DS_store
 notebooks/.DS_store
 venv
+plots

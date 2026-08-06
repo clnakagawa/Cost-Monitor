@@ -38,6 +38,10 @@ mainTbl <- reactive({
   ]
 })
 
+storData <- reactive({
+  fread(paste0("../data/", input$workspace, "/StorageEstimate.tsv")) 
+})
+
 selectInput("sampleType", "Entities to check", choices = NULL)
 checkboxGroupInput("wfCheck", "Workflows to show", choices = NULL)
 
@@ -256,17 +260,16 @@ renderDataTable({
 ### Storage Cost Estimate
 
 ```{r}
-storData <- fread("../data/StorageEstimate.tsv")
 sizeFactor <- 1024 ^ 4 # TB
 sizeUnit <- "TB"
-liveCost <- round(storData$`usage.live-object`[1] / sizeFactor, 2)
-softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
 
 renderPlot({
+  liveCost <- round(storData()$`usage.live-object`[1] / sizeFactor, 2)
+  softCost <- round(storData()$`usage.soft-deleted-object`[1] / sizeFactor, 2)
   pie(c(liveCost, softCost),
       labels = c(paste0(liveCost, sizeUnit, " (Live Objects)"),
                  paste0(softCost, sizeUnit, " (Soft-delete Objects)")),
-      main = paste0("Storage Cost (Monthly Total = $", storData$estimate, ")"),
+      main = paste0("Storage Cost (Monthly Total = $", storData()$estimate, ")"),
       cex = 2.4,
       cex.main = 2.9)
 })

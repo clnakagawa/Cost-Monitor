@@ -11,15 +11,6 @@ from pathlib import Path
 
 from costutils import *
 
-# convert submission response json to table of workflow data
-def json_to_table(sub_json):
-    subTable = pd.DataFrame(sub_json['workflows'])
-    subTable['workflowVersion'] = sub_json['methodConfigurationName']
-    subTable['sample'] = [entity['entityName'] for entity in subTable['workflowEntity']]
-    subTable['entityType'] = [entity['entityType'] for entity in subTable['workflowEntity']] # needed to split single vs multi-sample workflows
-    subTable['workflow'] = [inputRes[0]['inputName'].split('.')[0] for inputRes in subTable['inputResolutions']]
-    return(subTable)
-
 def main():
     # get config
     config_path = sys.argv[1]
@@ -30,11 +21,14 @@ def main():
     s.mount('http://', HTTPAdapter(max_retries=retries))
 
     # set up general workspace variable from config file + api path
-    with open(config_path, "r") as config_file: # potential here for cmd line option spec
+    with open(config_path, "r") as config_file:
         config = yaml.safe_load(config_file)
     workspaceName = config['workspace']['name']
     workspaceNamespace = config['workspace']['namespace']
     base_url = "https://api.firecloud.org/api/"
+
+    # use workspace class object as shorthand
+    ws = Workspace(config['workspace']['namespace'], config['workspace']['name'])
 
     # make data directory for workspace if doesn't exist
     Path("../data/" + config['workspace']['name']).mkdir(parents=True, exist_ok=True)
@@ -45,65 +39,37 @@ def main():
         "Authorization": f"Bearer {TOKEN}"
     }
 
+    # get tables for all entity types in workspace
+    entTypes = get_entity_types(ws, headers)
+    for entType, entTbl in get_entity_tables(ws, entTypes, headers).items():
+        entTbl.to_csv(f"../data/{ws.name}/{entType}_attributes.tsv", sep='\t', index=False)
+
     # Get a list of all workspace submissions + metadata
-    url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions"
-    response = requests.get(url, headers=headers, params={})
-    if response.ok:
-        subIds = [sub['submissionId'] for sub in response.json() if sub['status'] in ["Done", "Aborted"]]
-    else:
-        print(response.status_code, response.text)
-        sys.exit(1)
+    subIds = get_submissions(ws, headers)
 
     # check if processed submissions list exists
-    hasSubRecord = Path("../data/" + config['workspace']['name'] + "/submission_list.txt").is_file()
+    hasSubRecord = Path(f"../data/{ws.name}/submission_list.txt").is_file()
     if hasSubRecord:
         # get already processed ids and remove from current list
-        with open("../data/" + config['workspace']['name'] + "/submission_list.txt", 'r') as f:
+        with open(f"../data/{ws.name}/submission_list.txt", 'r') as f:
             procSubIds = [line.rstrip() for line in f]
         subIds = [subId for subId in subIds if subId not in procSubIds]
 
     # Get a list of all workspace method configs
     # Used to filter workflow table to only contain current workflows
-    attr_url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs"
-    response = requests.get(attr_url, headers=headers, params={'allRepos' : 'true'})
-    if not response.ok:
-        print(response.status_code, response.text)
-    currentMethods = [method['name'] for method in response.json()]
-
-    # Get list of workflow entities
-    entity_url = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/entities/sample_set"
-    response = requests.get(entity_url, headers=headers, params={})
-    if not response.ok:
-        print(response.status_code, response.text)
-    pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/" + config['workspace']['name'] + "/workspace_entities.tsv")
+    currentMethods = get_methods(ws, headers)
 
     # Process each submission individually and add data to workspace table
-    wfData = pd.read_table("../data/" + config['workspace']['name'] + "/workflowData.tsv") if hasSubRecord else pd.DataFrame()
-    for id in subIds:
-        print(f"processing submission {id}") # TODO: verbosity options?
-        suburl = f"{base_url}/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{id}"
-        response = requests.get(suburl, headers=headers, params={})
-        if response.ok:
-            respJson = response.json()
-            if any([method in respJson['methodConfigurationName'] for method in currentMethods]):
-                wfData = pd.concat([wfData, json_to_table(respJson)])
-            else:
-                print(f"submission using config {respJson['methodConfigurationName']} does not match a current workflow method")
-        else:
-            print(response.status_code, response.text)
+    wfData = pd.read_table(f"../data/{ws.name}/workflowData.tsv") if hasSubRecord else pd.DataFrame()
+    wfData = pd.concat([wfData, get_submission_table(ws, subIds, currentMethods, headers)])
     wfData.to_csv("../data/" + config['workspace']['name'] + "/workflowData.tsv", sep = '\t')
 
     # If submissions are processed without error, write/append to record
-    with open("../data/" + config['workspace']['name'] + "/submission_list.txt", 'a' if hasSubRecord else 'w') as f:
+    with open(f"../data/{ws.name}/submission_list.txt", 'a' if hasSubRecord else 'w') as f:
         f.write("\n".join(subIds))
 
     # storage cost estimates
-    storage_url = f"{base_url}/workspaces/v2/{workspaceNamespace}/{workspaceName}/storageCostEstimate"
-    response = requests.get(storage_url, headers=headers, params={})
-    if response.ok:
-        pd.DataFrame(pd.json_normalize(response.json())).to_csv("../data/" + config['workspace']['name'] + "/StorageEstimate.tsv", sep = '\t')
-    else:
-        print(response.status_code, response.text)
+    get_storage_cost_table(ws, headers).to_csv(f"../data/{ws.name}/StorageEstimate.tsv", sep = '\t')
 
 if __name__ == "__main__":
     main()

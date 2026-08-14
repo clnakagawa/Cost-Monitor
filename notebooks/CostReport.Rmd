@@ -10,17 +10,10 @@ library(data.table)
 library(DT)
 library(stringr)
 library(ComplexHeatmap)
+library(InteractiveComplexHeatmap)
 library(circlize)
 library(ggplot2)
 library(patchwork)
-
-# mainTbl <- function(wsName) {
-#   fread(paste0("../data/", wsName, "/workflowData.tsv"))[
-#     cost != "N/A",
-#     .(workflow, workflowId, sample, entityType, cost = as.numeric(cost), costType, status,
-#       statusLastChangedDate, workflowVersion)
-#   ]
-# }
 ```
 
 # Sidebar {.sidebar}

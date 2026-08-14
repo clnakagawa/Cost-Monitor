@@ -5,7 +5,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import sys
 
-def load_flagstat(flgPath):
+def load_flagstat(sid,flgPath):
     flgTbl = pd.read_csv(flgPath, header=None, sep=' ', usecols=[0,2], names = ["pass", "fail"])
     flgTbl['metric'] = ["total", "primary", "secondary", "supplementary",
                         "duplicates", "primary_duplicates", "mapped", "primary_mapped",
@@ -15,6 +15,7 @@ def load_flagstat(flgPath):
                      var_name = "QC", value_name = "count")
     outTbl = flgTbl[['count']].T 
     outTbl.columns = flgTbl['metric'] + "_" + flgTbl['QC']
+    outTbl['sample_ID'] = sid
     return(outTbl)
 
 
@@ -22,37 +23,39 @@ def main():
     entityTbl = sys.argv[1]
     data = pd.read_table(entityTbl)
 
-    summTbl = pd.concat([load_flagstat(path) for path in data['flagstat'] if isinstance(path, str) and "flagstat" in path])
+    summTbl = pd.concat([load_flagstat(sid,path) for sid,path in zip(data['Sample_ID'], data['flagstat']) if isinstance(path, str) and "flagstat" in path])
 
-    denom = summTbl["total_pass"] + summTbl["total_fail"]
-    cols = list(summTbl.columns.difference(["total_pass", "total_fail"]))
-    summTbl[cols] = summTbl[cols].div(denom, axis=0)
+    summTbl.to_csv(sys.argv[1].replace("_attributes.tsv", "_flagstat.tsv"), sep='\t',
+                   index = False)
+    # denom = summTbl["total_pass"] + summTbl["total_fail"]
+    # cols = list(summTbl.columns.difference(["total_pass", "total_fail"]))
+    # summTbl[cols] = summTbl[cols].div(denom, axis=0)
 
-    summTblPass = summTbl.iloc[:,0:16]
-    summTblFail = summTbl.iloc[:,16:32]
-    print(summTbl.columns)
+    # summTblPass = summTbl.iloc[:,0:16]
+    # summTblFail = summTbl.iloc[:,16:32]
+    # print(summTbl.columns)
 
-    print(summTblPass)
-    print(summTblFail)
+    # print(summTblPass)
+    # print(summTblFail)
 
 
-    # QC passed reads
-    summTblPass = pd.melt(summTblPass, var_name="variable", value_name="value")
-    gpass = sns.FacetGrid(summTblPass, row = "variable",
-                      height=1.2, aspect=5, sharex=False)
-    gpass.map(sns.boxplot, "value")
-    plt.savefig("../plots/flagstat_pass_boxplot.png")
-    plt.clf()
+    # # QC passed reads
+    # summTblPass = pd.melt(summTblPass, var_name="variable", value_name="value")
+    # gpass = sns.FacetGrid(summTblPass, row = "variable",
+    #                   height=1.2, aspect=5, sharex=False)
+    # gpass.map(sns.boxplot, "value")
+    # plt.savefig("../plots/flagstat_pass_boxplot.png")
+    # plt.clf()
 
-    # QC Failed reads
-    summTblFail = pd.melt(summTblFail, var_name="variable", value_name="value")
-    gfail = sns.FacetGrid(summTblFail, row = "variable",
-                          height=1.2, aspect=5, sharex=False)
-    gfail.map(sns.boxplot, "value")
-    plt.savefig("../plots/flagstat_fail_boxplot.png")
+    # # QC Failed reads
+    # summTblFail = pd.melt(summTblFail, var_name="variable", value_name="value")
+    # gfail = sns.FacetGrid(summTblFail, row = "variable",
+    #                       height=1.2, aspect=5, sharex=False)
+    # gfail.map(sns.boxplot, "value")
+    # plt.savefig("../plots/flagstat_fail_boxplot.png")
 
-    #TODO Filter and create lists to remove
-    # Integrate with API to edit sets? Not sure
+    # #TODO Filter and create lists to remove
+    # # Integrate with API to edit sets? Not sure
 
 
 if __name__ == "__main__":

@@ -99,7 +99,33 @@ def get_storage_cost_table(ws, headers):
 def json_to_table(sub_json):
     subTable = pd.DataFrame(sub_json['workflows'])
     subTable['workflowVersion'] = sub_json['methodConfigurationName']
+    if not 'workflowEntity' in subTable.columns:
+        return(pd.DataFrame())
     subTable['sample'] = [entity['entityName'] for entity in subTable['workflowEntity']]
     subTable['entityType'] = [entity['entityType'] for entity in subTable['workflowEntity']] # needed to split single vs multi-sample workflows
     subTable['workflow'] = [inputRes[0]['inputName'].split('.')[0] for inputRes in subTable['inputResolutions']]
     return(subTable)
+
+# json list element to include in sample set patch request data to add element
+def format_add_json(entName, entType):
+    return({'op': 'AddListMember', 'attributeListName': f"{entType}s", 
+            'newMember': {'entityType': entType, 'entityName': entName}})
+
+# json list element to include in sample set patch request data to remove element
+def format_rem_json(entName, entType):
+    return({'op': 'RemoveListMember', 'attributeListName': f"{entType}s", 
+            'removeMember': {'entityType': entType, 'entityName': entName}})
+
+# update sample set with additions/removals 
+def update_set(ws, headers, set, add, remove, entType):
+    url = f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/entities/{entType}_set/{set}"
+    data = [format_add_json(ent, entType) for ent in add] + [format_rem_json(ent, entType) for ent in remove]
+    print(data)
+    requests.patch(url, json = data, headers = headers)
+
+# add sample sets to workspace
+def add_sets(ws, headers, sets, entType):
+    setdf = pd.DataFrame(sets, columns = [f"entity:{entType}_set_id"])
+    requests.post(f"{BASE_URL}/{ws.namespace}/{ws.name}/flexibleImportEntities",
+                  files={"entities": setdf.to_csv(sep='\t', index=0)},
+                  headers=headers)

@@ -38,6 +38,15 @@ storData <- reactive({
 selectInput("sampleType", "Entities to check", choices = NULL)
 checkboxGroupInput("wfCheck", "Workflows to show", choices = NULL)
 
+charrTbl <- reactive({
+  charrPath <- paste0("../data/", input$workspace, "/", input$sampleType, "_charr.tsv")
+  if (file.exists(charrPath)) {
+    fread(charrPath)
+  } else {
+    data.table()
+  }
+})
+
 # need renderUI bc depends on selected workspace
 observeEvent(input$workspace, {
   updateSelectInput(getDefaultReactiveDomain(), "sampleType",
@@ -266,4 +275,31 @@ renderPlot({
       cex = 2.4,
       cex.main = 2.9)
 })
+```
+
+# QC Stats
+
+## Column 1
+
+### Charr QC Table
+
+```{r}
+renderDataTable({
+  datatable(charrTbl())
+})
+```
+
+### Charr QC Plots
+
+```{r}
+renderPlot({
+  tmpTbl <- charrTbl()
+  charrPlts <- lapply(colnames(tmpTbl)[-1], function(col) {
+    ggplot(tmpTbl[, c("#SAMPLE", col), with = F], aes(.data[[col]])) + geom_boxplot() + theme_classic() + 
+      theme(axis.text.y = element_blank(),
+            axis.ticks.y = element_blank())
+  })
+  Reduce(`+`, charrPlts)
+})
+
 ```

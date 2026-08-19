@@ -42,6 +42,7 @@ def main():
         # get tables for all entity types in workspace
         entTypes = get_entity_types(ws, headers)
         for entType, entTbl in get_entity_tables(ws, entTypes, headers).items():
+            print(entTbl.head)
             entTbl.to_csv(f"../data/{ws.name}/{entType}_attributes.tsv", sep='\t', index=False)
 
         # Get a list of all workspace submissions + metadata

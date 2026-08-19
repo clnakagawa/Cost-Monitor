@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import yaml
+import re
 import requests
 from requests.adapters import HTTPAdapter, Retry
 import pandas as pd
@@ -29,57 +30,45 @@ def get_access_token():
         creds.refresh(Request())
     return creds.token
 
+def get_session():
+    TOKEN=get_access_token()
+    s = requests.Session()
+    s.headers.update({'Authorization': f"Bearer {TOKEN}"})
+    return(s)
+
 # get array of entity names
-def get_entity_types(ws, headers):
-    response = requests.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/entities", 
-                            headers=headers, 
-                            params={})
-    # return(response.text)
+def get_entity_types(ws, s):
+    response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/entities")
     return(list(response.json().keys()))
 
-# get table for a given entity
-def get_entity_tables(ws, entTypes, headers):
-    response = requests.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/entities_with_type",
-                            headers=headers,
-                            params={})
-
-    # make dict with entry for each entity
-    entTbls = {entType:[] for entType in entTypes}
-
-    # iterate over list of entities and assign by entity type
-    for ent in response.json():
-        entTbls[ent['entityType']].append(ent['attributes'])
-    
-    return({ent:pd.json_normalize(entTbl) for ent, entTbl in entTbls.items()})
+def get_entity_table(ws, entType, s):
+    response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/entities/{entType}")
+    return(pd.json_normalize(response.json()))
 
 # get all submissions for a workspace
-def get_submissions(ws, headers):
-    response = requests.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions",
-                            headers=headers,
-                            params={})
+def get_submissions(ws, s):
+    response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions")
     return([sub['submissionId'] for sub in response.json() if sub['status'] in ["Done", "Aborted"]])
 
-def get_methods(ws, headers):
-    response = requests.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/methodconfigs",
-                            headers=headers,
-                            params={'allRepos' : 'true'})
+def get_methods(ws, s):
+    response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/methodconfigs")
     return([method['name'] for method in response.json()])
 
 
-def get_submission_info(ws, subId, headers):
-    response = requests.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions/{subId}", headers=headers, params={})
+def get_submission_info(ws, subId, s):
+    response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions/{subId}")
     return(response.json())
 
-def get_workflow_info(ws, wfId, headers):
-    response = requests.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/workflows")
+# def get_workflow_info(ws, wfId, headers):
+#     response = requests.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/workflows")
 
 # get submission data from list of IDs and create table
-def get_submission_table(ws, subList, methodList, headers):
+def get_submission_table(ws, subList, methodList, s):
     newSubTbl=pd.DataFrame()
     for id in subList:
         print(f"processing submission {id}") # TODO: verbosity options?
         suburl = f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions/{id}"
-        response = requests.get(suburl, headers=headers, params={})
+        response = s.get(suburl)
         if response.ok:
             respJson = response.json()
             if any([method in respJson['methodConfigurationName'] for method in methodList]):
@@ -90,8 +79,8 @@ def get_submission_table(ws, subList, methodList, headers):
             print(response.status_code, response.text)
     return(newSubTbl)
 
-def get_storage_cost_table(ws, headers):
-    response = requests.get(f"{BASE_URL}/workspaces/v2/{ws.namespace}/{ws.name}/storageCostEstimate", headers=headers, params={})
+def get_storage_cost_table(ws, s):
+    response = s.get(f"{BASE_URL}/workspaces/v2/{ws.namespace}/{ws.name}/storageCostEstimate")
     return(pd.DataFrame(pd.json_normalize(response.json())))
 
 
@@ -117,15 +106,21 @@ def format_rem_json(entName, entType):
             'removeMember': {'entityType': entType, 'entityName': entName}})
 
 # update sample set with additions/removals 
-def update_set(ws, headers, set, add, remove, entType):
+def update_set(ws, s, set, add, remove, entType):
     url = f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/entities/{entType}_set/{set}"
     data = [format_add_json(ent, entType) for ent in add] + [format_rem_json(ent, entType) for ent in remove]
-    print(data)
-    requests.patch(url, json = data, headers = headers)
+    s.patch(url, json = data)
 
 # add sample sets to workspace
-def add_sets(ws, headers, sets, entType):
+def add_sets(ws, s, sets, entType):
     setdf = pd.DataFrame(sets, columns = [f"entity:{entType}_set_id"])
-    requests.post(f"{BASE_URL}/{ws.namespace}/{ws.name}/flexibleImportEntities",
-                  files={"entities": setdf.to_csv(sep='\t', index=0)},
-                  headers=headers)
+    s.post(f"{BASE_URL}/{ws.namespace}/{ws.name}/flexibleImportEntities",
+           files={"entities": setdf.to_csv(sep='\t', index=0)})
+
+# get all samples currently assigned to sets
+def get_assigned_entities(setTblPath, entType):
+    tbl = pd.read_csv(setTblPath)
+    set_ents = []
+    for set in tbl[f"attributes.{entType}s.items"]:
+        set_ents = set_ents + re.findall("(?<=Name': ').*?(?='})", set)
+    return(set_ents)

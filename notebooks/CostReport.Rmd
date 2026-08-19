@@ -47,6 +47,15 @@ charrTbl <- reactive({
   }
 })
 
+demoTbl <- reactive({
+  demoPath <- paste0("../data/", input$workspace, "/", input$sampleType, "_demo.tsv")
+  if (file.exists(demoPath)) {
+    fread(demoPath) 
+  } else {
+    data.table()
+  }
+})
+
 # need renderUI bc depends on selected workspace
 observeEvent(input$workspace, {
   updateSelectInput(getDefaultReactiveDomain(), "sampleType",
@@ -302,4 +311,43 @@ renderPlot({
   Reduce(`+`, charrPlts)
 })
 
+```
+
+# Demographics
+
+## Column 1
+
+### Sex and Ancestry Table
+
+```{r}
+renderDataTable({
+  datatable(demoTbl())
+})
+```
+
+## Column 2
+
+### Ancestry Plot
+
+```{r}
+renderPlot({
+  ancTbl <- demoTbl()
+  ggplot(ancTbl, aes(`GD1(x)`, `GD2(y)`, color = ancestry)) + geom_point() + theme_classic()
+})
+```
+
+### Ancestry Counts
+
+```{r}
+renderDataTable({
+  datatable(demoTbl()[,.(count = .N), by = c("ancestry")])
+})
+```
+
+### Sex Karyotype Estimates
+
+```{r}
+renderDataTable({
+  datatable(demoTbl()[,.(count = .N), by = c("chrX_count", "chrY_count")])
+})
 ```

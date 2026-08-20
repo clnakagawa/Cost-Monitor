@@ -7,3 +7,4 @@ notebooks/CostReport.html
 notebooks/.DS_store
 venv
 plots
+scripts/__pycache__

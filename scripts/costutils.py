@@ -109,17 +109,17 @@ def format_rem_json(entName, entType):
 def update_set(ws, s, set, add, remove, entType):
     url = f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/entities/{entType}_set/{set}"
     data = [format_add_json(ent, entType) for ent in add] + [format_rem_json(ent, entType) for ent in remove]
-    s.patch(url, json = data)
+    return(s.patch(url, json = data))
 
 # add sample sets to workspace
 def add_sets(ws, s, sets, entType):
     setdf = pd.DataFrame(sets, columns = [f"entity:{entType}_set_id"])
-    s.post(f"{BASE_URL}/{ws.namespace}/{ws.name}/flexibleImportEntities",
-           files={"entities": setdf.to_csv(sep='\t', index=0)})
+    return(s.post(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/flexibleImportEntities",
+                  files={"entities": setdf.to_csv(sep='\t', index=0)}))
 
 # get all samples currently assigned to sets
 def get_assigned_entities(setTblPath, entType):
-    tbl = pd.read_csv(setTblPath)
+    tbl = pd.read_csv(setTblPath, sep='\t')
     set_ents = []
     for set in tbl[f"attributes.{entType}s.items"]:
         set_ents = set_ents + re.findall("(?<=Name': ').*?(?='})", set)

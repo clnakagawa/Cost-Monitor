@@ -48,6 +48,7 @@ def get_entity_table(ws, entType, s):
 # get all submissions for a workspace
 def get_submissions(ws, s):
     response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions")
+    return([sub['submissionId'] for sub in response.json()])
     return([sub['submissionId'] for sub in response.json() if sub['status'] in ["Done", "Aborted"]])
 
 def get_methods(ws, s):
@@ -57,18 +58,14 @@ def get_methods(ws, s):
 
 def get_submission_info(ws, subId, s):
     response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions/{subId}")
-    return(response.json())
-
-# def get_workflow_info(ws, wfId, headers):
-#     response = requests.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/workflows")
+    return(response)
 
 # get submission data from list of IDs and create table
 def get_submission_table(ws, subList, methodList, s):
     newSubTbl=pd.DataFrame()
     for id in subList:
         print(f"processing submission {id}") # TODO: verbosity options?
-        suburl = f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions/{id}"
-        response = s.get(suburl)
+        response = get_submission_info(ws, id, s)
         if response.ok:
             respJson = response.json()
             if any([method in respJson['methodConfigurationName'] for method in methodList]):

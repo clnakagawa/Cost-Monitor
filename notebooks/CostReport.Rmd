@@ -83,25 +83,32 @@ observeEvent(input$sampleType, {
 # color palette for progress heatmap, no need to change
 pal <- colorRampPalette(c("skyblue", "gray", "red", "green"))(4)
 colors = structure(pal, names = c("0", "1", "2", "3"))
+valmap = c("Running" = 0, "Not Started" = 1, "Failed" = 2, "Aborted" = 2, "Succeeded" = 3)
 
 renderPlot({
   req(input$wfCheck)
+  print(unique(mainTbl()$status))
   mapTable <- dcast(
-    unique(mainTbl()[entityType == input$sampleType & workflow %in% input$wfCheck][order(status, decreasing = TRUE)], by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
+    unique(mainTbl()[entityType == input$sampleType & workflow %in% input$wfCheck][order(status, decreasing = TRUE)], by = c("workflow", "sample"))[, c("workflow", "sample", "status")],
     sample ~ workflow,
     value.var = "status"
   )
   wfCols <- colnames(mapTable)[-1]
-  mapTable$progress <- rowSums(mapTable[,-1], na.rm=TRUE)
+  mapTable[, (wfCols) := lapply(.SD, function(col) fifelse(is.na(col), "Not Started", col)), .SDcols = wfCols]
+  
+  mapTable$progress <- rowSums(mapTable[,-1] == "Succeeded")
   setorderv(mapTable, c("progress", wfCols), order = -1)
-
+  
   # logic for coloring table
   mapTable[, (wfCols) := lapply(
     .SD,
-    function(col) fifelse(is.na(col), 1, col + 2)
+    function(col) valmap[col]
   ), .SDcols = wfCols]
-  setorderv(mapTable, wfCols, order = -1)
-
+  
+  print(mapTable)
+  
+  # setorderv(mapTable, wfCols, order = -1)
+  
   Heatmap(
     mapTable[, wfCols, with = FALSE],
           # width = unit(8, "cm"),
@@ -118,7 +125,7 @@ renderPlot({
             title = "Status",
             at = 0:3,
             color_bar = "discrete",
-            labels = c("G2C processed", "not started", "failed", "complete"),
+            labels = c("Running", "Not Started", "Failed", "Complete"),
             labels_gp = gpar(fontsize = 10),
             title_gp = gpar(fontsize = 12, fontface = "bold"),
             grid_height = unit(8, "mm"),

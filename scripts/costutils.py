@@ -48,11 +48,13 @@ def get_entity_table(ws, entType, s):
 # get all submissions for a workspace
 def get_submissions(ws, s):
     response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions")
-    return([sub['submissionId'] for sub in response.json()])
+    # return([sub['submissionId'] for sub in response.json()])
     return([sub['submissionId'] for sub in response.json() if sub['status'] in ["Done", "Aborted"]])
 
 def get_methods(ws, s):
-    response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/methodconfigs")
+    response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/methodconfigs",
+                     params={'allRepos': True})
+    print(response.text)
     return([method['name'] for method in response.json()])
 
 
@@ -121,3 +123,12 @@ def get_assigned_entities(setTblPath, entType):
     for set in tbl[f"attributes.{entType}s.items"]:
         set_ents = set_ents + re.findall("(?<=Name': ').*?(?='})", set)
     return(set_ents)
+
+# make dictionary object from sample_set attribute table
+def set_table_dict(setTblPath, entType):
+    tbl = pd.read_csv(setTblPath, sep='\t')
+    entDict = {}
+    for index, row in tbl.iterrows():
+        for ent in re.findall("(?<=Name': ').*?(?='})", row[f"attributes.{entType}s.items"]):
+            entDict[ent] = row['name']
+    return(entDict)

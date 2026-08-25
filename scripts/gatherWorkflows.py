@@ -54,6 +54,7 @@ def main():
         # Get a list of all workspace method configs
         # Used to filter workflow table to only contain current workflows
         currentMethods = get_methods(ws, s)
+        print(currentMethods)
 
         # Process each submission individually and add data to workspace table
         wfData = pd.read_table(f"../data/{ws.name}/workflowData.tsv") if hasSubRecord else pd.DataFrame()

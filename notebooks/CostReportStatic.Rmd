@@ -1,0 +1,307 @@
+---
+title: "Workflow Cost Report"
+output: flexdashboard::flex_dashboard
+params:
+  workspace: !r unique(list.files("../data"))[1]
+  sampleType: !r read.table(paste0("../data/", unique(list.files("../data"))[1], "/workflowData.tsv"), header = T, sep='\t')$entityType[1]
+---
+
+```{r global, include=FALSE}
+library(data.table)
+library(DT)
+library(stringr)
+library(ComplexHeatmap)
+library(InteractiveComplexHeatmap)
+library(circlize)
+library(ggplot2)
+library(patchwork)
+
+
+```
+
+
+```{r loading_data}
+mainTbl <- fread(paste0("../data/", params$workspace, "/workflowData.tsv"))[cost != "N/A",
+                                                                            .(workflow, workflowId, sample, entityType, cost = as.numeric(cost), costType, status,
+                                                                             statusLastChangedDate, workflowVersion)]
+
+storData <- fread(paste0("../data/", params$workspace, "/StorageEstimate.tsv"))
+
+charrTbl <- data.table()
+charrPath <- paste0("../data/", params$workspace, "/", params$sampleType, "_charr.tsv")
+if (file.exists(charrPath)) {
+  charrTbl <- fread(charrPath)
+}
+
+demoTbl <- data.table()
+demoPath <- paste0("../data/", params$workspace, "/", params$sampleType, "_demo.tsv")
+if (file.exists(demoPath)) {
+  demoTbl <- fread(demoPath)
+}
+```
+
+# Current Sample Status
+
+## Column 1 {data-width="300"}
+
+### Sample Status Heatmap {data-height="600"}
+
+```{r progress_heatmap}
+# color palette for progress heatmap, no need to change
+pal <- colorRampPalette(c("skyblue", "gray", "red", "green"))(4)
+colors = structure(pal, names = c("0", "1", "2", "3"))
+valmap = c("Running" = 0, "Not Started" = 1, "Failed" = 2, "Aborted" = 2, "Succeeded" = 3)
+
+
+mapTable <- dcast(
+  unique(mainTbl[entityType == params$sampleType][order(status, decreasing = TRUE)], by = c("workflow", "sample"))[, c("workflow", "sample", "status")],
+  sample ~ workflow,
+  value.var = "status"
+)
+wfCols <- colnames(mapTable)[-1]
+mapTable[, (wfCols) := lapply(.SD, function(col) fifelse(is.na(col), "Not Started", col)), .SDcols = wfCols]
+
+mapTable$progress <- rowSums(mapTable[,-1] == "Succeeded")
+setorderv(mapTable, c("progress", wfCols), order = -1)
+
+# logic for coloring table
+mapTable[, (wfCols) := lapply(
+  .SD,
+  function(col) valmap[col]
+), .SDcols = wfCols]
+
+# setorderv(mapTable, wfCols, order = -1)
+
+Heatmap(
+  mapTable[, wfCols, with = FALSE],
+        # width = unit(8, "cm"),
+        # height = unit(12, "cm"),
+        col = colors,
+        cluster_columns = FALSE,
+        cluster_rows = FALSE,
+        column_names_side = "top",
+        column_names_rot = 45,
+        column_names_gp = gpar(fontsize = 10, fontface = "bold"),
+        rect_gp = gpar(col = "darkgray", lwd = 0.1),
+        border_gp = gpar(col = "black", lwd = 0.2),
+        heatmap_legend_param = list(
+          title = "Status",
+          at = 0:3,
+          color_bar = "discrete",
+          labels = c("Running", "Not Started", "Failed", "Complete"),
+          labels_gp = gpar(fontsize = 10),
+          title_gp = gpar(fontsize = 12, fontface = "bold"),
+          grid_height = unit(8, "mm"),
+          grid_width = unit(8, "mm")
+        ),
+        left_annotation = rowAnnotation(
+          title = anno_block(
+            labels = c(paste0(nrow(mapTable), "\nTotal Samples")),
+            labels_rot = 0,
+            width = unit(3, "cm"),
+            gp = gpar(col = NA)
+          )
+        )
+)
+
+```
+
+### Cost Distribution {data-height="400"}
+
+```{r}
+
+tmpTbl <- mainTbl[entityType == params$sampleType][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+tmpTbl <- tmpTbl[, .(total_cost = sum(total_cost)), by = sample]
+
+sampStatus <- unique(mainTbl[entityType == params$sampleType &
+                               status == "Succeeded", c("workflow", "sample")])
+numWorkflows <- uniqueN(sampStatus$workflow)
+sampStatus <- sampStatus[,.(count = .N), by = sample]
+completeSamples <- sampStatus[count == numWorkflows]$sample
+
+
+ggplot(rbind(tmpTbl[, .(type = "All"), c("total_cost")],
+             tmpTbl[sample %in% completeSamples, .(type = "Complete"), c("total_cost")]),
+       aes(total_cost, type)) +
+  geom_boxplot() +
+  ylab("") +
+  xlab("Total Cost per Sample ($)") +
+  scale_x_continuous(limits = c(0, 15)) +
+  ggtitle("Sample Costs") +
+  theme_linedraw() +
+  theme(text = element_text(size=14))
+
+```
+
+## Column 2 {data-width="700"}
+
+### Sample Status Table
+
+```{r}
+
+tmpStatus <- dcast(
+  unique(mainTbl[entityType == params$sampleType][order(status, decreasing = TRUE)],
+         by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
+  sample ~ workflow,
+  value.var = "status"
+)
+wfCols <- colnames(tmpStatus)[-1]
+tmpStatus$progress <- rowSums(tmpStatus[,-1], na.rm=TRUE)
+setorderv(tmpStatus, c("progress", wfCols), order = -1)
+invStatus <- copy(tmpStatus)
+wfCols <- colnames(tmpStatus)[-1]
+invStatus[, (wfCols) := lapply(.SD, function(col) as.integer(col == 0)), .SDcols = wfCols]
+tmpSumm <- rbind(colSums(tmpStatus[, -c("sample", "progress")], na.rm=TRUE),
+                 colSums(invStatus[, -c("sample", "progress")], na.rm=TRUE))
+rownames(tmpSumm) <- c("Success", "Fail")
+datatable(t(tmpSumm))
+
+```
+
+### Sample Cost Table
+
+```{r}
+
+tmpCostTbl <- mainTbl[entityType == params$sampleType][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+
+
+sampByWf <- dcast(tmpCostTbl, sample ~ workflow, value.var = "total_cost")
+sampByWf[, total := round(rowSums(.SD, na.rm = TRUE), 2), .SDcols = colnames(sampByWf)[-1]]
+datatable(sampByWf)
+
+```
+
+# Workflow Cost Estimates
+
+## Column 1 {data-width="350"}
+
+### Workflow Distribution
+
+```{r workflow_dist, echo=FALSE}
+
+tmpCostTbl <- mainTbl[entityType == params$sampleType][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+
+ggplot(tmpCostTbl, aes(total_cost, workflow)) +
+  geom_boxplot() +
+  ylab("") +
+  scale_x_continuous(limits = c(0, 10)) +
+  ggtitle("Workflow Costs per Sample ($)") +
+  theme_linedraw() +
+  theme(text = element_text(size = 14))
+
+```
+
+### Workflow Cost Table
+
+```{r}
+
+tmpCostTbl <- mainTbl[entityType == params$sampleType][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
+datatable(tmpCostTbl[, .(avg_cost = mean(total_cost), sd_cost = sd(total_cost),
+                       total = sum(total_cost)), by = workflow]) %>% formatRound(c(2:4), 2)
+
+
+```
+
+## Column 2 {data-width="650"}
+
+### All Workflows
+
+```{r whole_table, echo=FALSE}
+
+datatable(mainTbl[entityType == params$sampleType])
+```
+
+### Workflow Table
+
+```{r workflow_table, echo=FALSE}
+
+tmpCost <-   mainTbl[entityType == params$sampleType][, .(total_cost = sum(cost)), by = c("workflow", "workflowVersion", "sample")][
+  ,.(avg_cost = mean(total_cost), sd_cost = sd(total_cost), count = .N, total_cost = sum(total_cost)),
+  by = c("workflow", "workflowVersion")][order(workflow, workflowVersion)
+]
+datatable(tmpCost) %>% formatRound(c(3,4,6), 2)
+
+```
+
+# Data Usage
+
+## Column 1
+
+### Storage Cost Estimate
+
+```{r}
+sizeFactor <- 1024 ^ 4 # TB
+sizeUnit <- "TB"
+
+
+liveCost <- round(storData$`usage.live-object`[1] / sizeFactor, 2)
+softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
+pie(c(liveCost, softCost),
+    labels = c(paste0(liveCost, sizeUnit, " (Live)"),
+               paste0(softCost, sizeUnit, " (Soft-delete)")),
+    main = paste0("Storage Cost (Monthly Total = $", storData$estimate, ")"),
+    cex = 1,
+    cex.main = 1.2)
+
+```
+
+# QC Stats
+
+## Column 1
+
+### Charr QC Table
+
+```{r}
+datatable(charrTbl)
+```
+
+### Charr QC Plots
+
+```{r}
+
+charrPlts <- lapply(colnames(charrTbl)[-1], function(col) {
+  ggplot(charrTbl[, c("#SAMPLE", col), with = F], aes(.data[[col]])) + geom_boxplot() + theme_classic() +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank())
+})
+Reduce(`+`, charrPlts)
+
+```
+
+# Demographics
+
+## Column 1
+
+### Sex and Ancestry Table
+
+```{r}
+datatable(demoTbl)
+```
+
+## Column 2
+
+### Ancestry Plot
+
+```{r}
+if (nrow(demoTbl) > 0){
+  ggplot(demoTbl, aes(`GD1(x)`, `GD2(y)`, color = ancestry)) + geom_point() + theme_classic()
+}
+
+```
+
+### Ancestry Counts
+
+```{r}
+if (nrow(demoTbl) > 0) {
+  datatable(demoTbl[,.(count = .N), by = c("ancestry")])
+}
+
+```
+
+### Sex Karyotype Estimates
+
+```{r}
+if (nrow(demoTbl) > 0) {
+  datatable(demoTbl[,.(count = .N), by = c("chrX_count", "chrY_count")])
+}
+```

@@ -179,22 +179,8 @@ renderPlot({
 renderDataTable({
   req(input$wfCheck)
 
-  tmpStatus <- dcast(
-    unique(mainTbl()[entityType == input$sampleType][order(status, decreasing = TRUE)],
-           by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
-    sample ~ workflow,
-    value.var = "status"
-  )
-  wfCols <- colnames(tmpStatus)[-1]
-  tmpStatus$progress <- rowSums(tmpStatus[,-1], na.rm=TRUE)
-  setorderv(tmpStatus, c("progress", wfCols), order = -1)
-  invStatus <- copy(tmpStatus)
-  wfCols <- colnames(tmpStatus)[-1]
-  invStatus[, (wfCols) := lapply(.SD, function(col) as.integer(col == 0)), .SDcols = wfCols]
-  tmpSumm <- rbind(colSums(tmpStatus[, -c("sample", "progress")], na.rm=TRUE),
-                   colSums(invStatus[, -c("sample", "progress")], na.rm=TRUE))
-  rownames(tmpSumm) <- c("Success", "Fail")
-  datatable(t(tmpSumm[, input$wfCheck]))
+  statTable <- unique(mainTbl()[,c("sample", "workflow", "status")][order(-status)], by = c("sample", "workflow"))
+  datatable(dcast(statTable[,.(count=.N),by=c("workflow","status")], workflow ~ status, fill = 0))
 })
 ```
 

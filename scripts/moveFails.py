@@ -23,7 +23,7 @@ def main():
 
     # get list of fails for the specified submission
     subTbl = json_to_table(response.json())  
-    fails = subTbl[subTbl['status'] == "Failed"]['sample']
+    fails = subTbl[subTbl['status'].isin(["Failed", "Aborted"])]['sample']
     entType = subTbl['entityType'][1]
 
     entDict = set_table_dict(f"../data/{ws.name}/{entType}_set_attributes.tsv", entType)
@@ -44,12 +44,16 @@ def main():
         print("Keeping entities in original sets")
         return
 
-    # make dict to figure out sample sets to edit
-    # probably most robust way of doing this
-    entDict = set_table_dict(f"../data/{ws.name}/{entType}_set_attributes.tsv", entType)
+    for fail in fails:
+        set = entDict[fail]
+        response = update_set(ws, s, set, [], [fail], entType)
 
-    
-
+    # refresh entity dataset after changes
+    entTypes = [entType, f"{entType}_set"]
+    for ent in entTypes:
+        print(f"updating table for {ent}")
+        entTbl = get_entity_table(ws, ent, s)
+        entTbl.to_csv(f"../data/{ws.name}/{ent}_attributes.tsv", sep='\t', index=False)
     
 
     

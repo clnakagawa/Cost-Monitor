@@ -1,5 +1,6 @@
 ---
-title: "Workflow Cost Report"
+title: "Workflow Cost Report `r Sys.Date()`"
+data: "`r Sys.Date()`"
 output: flexdashboard::flex_dashboard
 params:
   workspace: !r unique(list.files("../data"))[1]
@@ -8,6 +9,9 @@ params:
 
 ```{r global, include=FALSE}
 library(data.table)
+library(htmltools)
+library(plotly)
+library(shiny)
 library(DT)
 library(stringr)
 library(ComplexHeatmap)
@@ -46,7 +50,7 @@ if (file.exists(demoPath)) {
 
 ### Sample Status Heatmap {data-height="600"}
 
-```{r progress_heatmap}
+```{r progress_heatmap, fig.width = 6, fig.height = 7}
 # color palette for progress heatmap, no need to change
 pal <- colorRampPalette(c("skyblue", "gray", "red", "green"))(4)
 colors = structure(pal, names = c("0", "1", "2", "3"))
@@ -70,12 +74,11 @@ mapTable[, (wfCols) := lapply(
   function(col) valmap[col]
 ), .SDcols = wfCols]
 
-# setorderv(mapTable, wfCols, order = -1)
 
 Heatmap(
   mapTable[, wfCols, with = FALSE],
-        # width = unit(8, "cm"),
-        # height = unit(12, "cm"),
+        width = unit(8, "cm"),
+        height = unit(12, "cm"),
         col = colors,
         cluster_columns = FALSE,
         cluster_rows = FALSE,
@@ -104,11 +107,12 @@ Heatmap(
         )
 )
 
+
 ```
 
 ### Cost Distribution {data-height="400"}
 
-```{r}
+```{r, fig.height = 3, fig.width = 5}
 
 tmpTbl <- mainTbl[entityType == params$sampleType][, .(total_cost = round(sum(as.numeric(cost)), 2)), by = c("workflow", "sample")]
 tmpTbl <- tmpTbl[, .(total_cost = sum(total_cost)), by = sample]
@@ -139,22 +143,8 @@ ggplot(rbind(tmpTbl[, .(type = "All"), c("total_cost")],
 
 ```{r}
 
-tmpStatus <- dcast(
-  unique(mainTbl[entityType == params$sampleType][order(status, decreasing = TRUE)],
-         by = c("workflow", "sample"))[, c("workflow", "sample", "status")][, status := as.integer(status == "Succeeded")],
-  sample ~ workflow,
-  value.var = "status"
-)
-wfCols <- colnames(tmpStatus)[-1]
-tmpStatus$progress <- rowSums(tmpStatus[,-1], na.rm=TRUE)
-setorderv(tmpStatus, c("progress", wfCols), order = -1)
-invStatus <- copy(tmpStatus)
-wfCols <- colnames(tmpStatus)[-1]
-invStatus[, (wfCols) := lapply(.SD, function(col) as.integer(col == 0)), .SDcols = wfCols]
-tmpSumm <- rbind(colSums(tmpStatus[, -c("sample", "progress")], na.rm=TRUE),
-                 colSums(invStatus[, -c("sample", "progress")], na.rm=TRUE))
-rownames(tmpSumm) <- c("Success", "Fail")
-datatable(t(tmpSumm))
+statTable <- unique(mainTbl[entityType == params$sampleType][,c("sample", "workflow", "status")][order(-status)], by = c("sample", "workflow"))
+datatable(dcast(statTable[,.(count=.N),by=c("workflow","status")], workflow ~ status, fill = 0))
 
 ```
 
@@ -236,18 +226,21 @@ sizeUnit <- "TB"
 
 liveCost <- round(storData$`usage.live-object`[1] / sizeFactor, 2)
 softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
-pie(c(liveCost, softCost),
+if (liveCost + softCost > 0) {
+  pie(c(liveCost, softCost),
     labels = c(paste0(liveCost, sizeUnit, " (Live)"),
                paste0(softCost, sizeUnit, " (Soft-delete)")),
     main = paste0("Storage Cost (Monthly Total = $", storData$estimate, ")"),
     cex = 1,
     cex.main = 1.2)
+}
+
 
 ```
 
 # QC Stats
 
-## Column 1
+## Column 1 {data-width=600}
 
 ### Charr QC Table
 
@@ -255,16 +248,24 @@ pie(c(liveCost, softCost),
 datatable(charrTbl)
 ```
 
+## Column 2 {data-width=400}
+
 ### Charr QC Plots
 
-```{r}
+```{r, fig.height = 6, fig.width = 6}
+if (nrow(charrTbl) > 0) {
+  charrPlts <- lapply(colnames(charrTbl)[-1], function(col) {
+    ggplot(charrTbl[, c("#SAMPLE", col), with = F], aes(.data[[col]])) + geom_boxplot() + theme_classic() +
+      scale_x_continuous(labels = function(x) {
+        ifelse(x > 1000, scales::label_scientific()(x), x)
+      }) +
+      xlab("") + 
+      theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) +
+      ggtitle(col)
+  })
+  wrap_plots(charrPlts, nrow = 4)
+}
 
-charrPlts <- lapply(colnames(charrTbl)[-1], function(col) {
-  ggplot(charrTbl[, c("#SAMPLE", col), with = F], aes(.data[[col]])) + geom_boxplot() + theme_classic() +
-    theme(axis.text.y = element_blank(),
-          axis.ticks.y = element_blank())
-})
-Reduce(`+`, charrPlts)
 
 ```
 
@@ -280,25 +281,35 @@ datatable(demoTbl)
 
 ## Column 2
 
-### Ancestry Plot
+### Ancestry Plot {data-height=600}
 
-```{r}
+```{r, fig.width = 8, fig.height = 3}
 if (nrow(demoTbl) > 0){
-  ggplot(demoTbl, aes(`GD1(x)`, `GD2(y)`, color = ancestry)) + geom_point() + theme_classic()
+  anc_colors <- setNames(
+    scales::hue_pal()(length(unique(demoTbl$ancestry))),
+    unique(demoTbl$ancestry)
+  )
+  
+  ancBar <- ggplot(demoTbl, aes(ancestry, fill = ancestry)) +
+    geom_bar() +
+    xlab("") + 
+    scale_fill_manual(values = anc_colors) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+    theme_classic() +
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
+  
+  ancPts <- ggplot(demoTbl, aes(`GD1(x)`, `GD2(y)`, color = ancestry)) +
+    geom_point() +
+    scale_color_manual(values = anc_colors) +
+    theme_classic() +
+    theme(legend.position = "none")
+  
+  ancPts + ancBar
 }
 
 ```
 
-### Ancestry Counts
-
-```{r}
-if (nrow(demoTbl) > 0) {
-  datatable(demoTbl[,.(count = .N), by = c("ancestry")])
-}
-
-```
-
-### Sex Karyotype Estimates
+### Sex Karyotype Counts {data-height=400}
 
 ```{r}
 if (nrow(demoTbl) > 0) {

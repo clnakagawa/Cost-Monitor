@@ -8,3 +8,4 @@ notebooks/.DS_store
 venv
 plots
 scripts/__pycache__
+scripts/makeReports.sh

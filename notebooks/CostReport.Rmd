@@ -179,7 +179,7 @@ renderPlot({
 renderDataTable({
   req(input$wfCheck)
 
-  statTable <- unique(mainTbl()[,c("sample", "workflow", "status")][order(-status)], by = c("sample", "workflow"))
+  statTable <- unique(mainTbl()[entityType == input$sampleType][,c("sample", "workflow", "status")][order(-status)], by = c("sample", "workflow"))
   datatable(dcast(statTable[,.(count=.N),by=c("workflow","status")], workflow ~ status, fill = 0))
 })
 ```
@@ -325,15 +325,26 @@ renderDataTable({
 ```{r}
 renderPlot({
   ancTbl <- demoTbl()
-  ggplot(ancTbl, aes(`GD1(x)`, `GD2(y)`, color = ancestry)) + geom_point() + theme_classic()
-})
-```
-
-### Ancestry Counts
-
-```{r}
-renderDataTable({
-  datatable(demoTbl()[,.(count = .N), by = c("ancestry")])
+  anc_colors <- setNames(
+    scales::hue_pal()(length(unique(ancTbl$ancestry))),
+    unique(ancTbl$ancestry)
+  )
+  
+  ancBar <- ggplot(ancTbl, aes(ancestry, fill = ancestry)) +
+    geom_bar() +
+    xlab("") + 
+    scale_fill_manual(values = anc_colors) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+    theme_classic() +
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
+  
+  ancPts <- ggplot(ancTbl, aes(`GD1(x)`, `GD2(y)`, color = ancestry)) +
+    geom_point() +
+    scale_color_manual(values = anc_colors) +
+    theme_classic() +
+    theme(legend.position = "none")
+  
+  ancPts + ancBar
 })
 ```
 

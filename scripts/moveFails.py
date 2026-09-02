@@ -29,9 +29,16 @@ def main():
     entDict = set_table_dict(f"../data/{ws.name}/{entType}_set_attributes.tsv", entType)
     fails = [f for f in fails if entDict[f] != args.fail_set]
 
+    # adding already existing set doesn't seem to cause an error
+    print(f"Creating set {args.fail_set}")
+    response = add_sets(ws, s, [args.fail_set], entType)
+
     if len(fails) < 1:
         print("No fails to move")
         return
+
+
+
 
     print(f"Adding {len(fails)} samples to set {args.fail_set}")    
     response = update_set(ws, s, args.fail_set, fails, [], entType)

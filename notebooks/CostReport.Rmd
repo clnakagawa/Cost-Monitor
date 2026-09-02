@@ -291,17 +291,23 @@ renderDataTable({
 })
 ```
 
+## Column 2
+
 ### Charr QC Plots
 
 ```{r}
 renderPlot({
   tmpTbl <- charrTbl()
   charrPlts <- lapply(colnames(tmpTbl)[-1], function(col) {
-    ggplot(tmpTbl[, c("#SAMPLE", col), with = F], aes(.data[[col]])) + geom_boxplot() + theme_classic() + 
-      theme(axis.text.y = element_blank(),
-            axis.ticks.y = element_blank())
+    ggplot(tmpTbl[, c("#SAMPLE", col), with = F], aes(.data[[col]])) + geom_boxplot() + theme_classic() +
+      scale_x_continuous(labels = function(x) {
+        ifelse(x > 1000, scales::label_scientific()(x), x)
+      }) +
+      xlab("") + 
+      theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) +
+      ggtitle(col)
   })
-  Reduce(`+`, charrPlts)
+  wrap_plots(charrPlts, nrow = 4)
 })
 
 ```

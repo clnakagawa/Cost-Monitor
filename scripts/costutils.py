@@ -54,7 +54,6 @@ def get_submissions(ws, s):
 def get_methods(ws, s):
     response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/methodconfigs",
                      params={'allRepos': True})
-    print(response.text)
     return([method['name'] for method in response.json()])
 
 

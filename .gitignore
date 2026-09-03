@@ -1,6 +1,5 @@
 data
 misc
-Reports
 config/*
 notebooks/CostReport.html
 .DS_store

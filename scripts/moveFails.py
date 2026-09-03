@@ -26,12 +26,14 @@ def main():
     fails = subTbl[subTbl['status'].isin(["Failed", "Aborted"])]['sample']
     entType = subTbl['entityType'][1]
 
-    entDict = set_table_dict(f"../data/{ws.name}/{entType}_set_attributes.tsv", entType)
+    SCRIPT_DIR = Path(__file__).resolve().parent
+    entDict = set_table_dict(SCRIPT_DIR / f"../data/{ws.name}/{entType}_set_attributes.tsv", entType)
     fails = [f for f in fails if entDict[f] != args.fail_set]
 
     # adding already existing set doesn't seem to cause an error
-    print(f"Creating set {args.fail_set}")
-    response = add_sets(ws, s, [args.fail_set], entType)
+    if args.fail_set not in entDict.values():
+        print(f"Creating set {args.fail_set}")
+        response = add_sets(ws, s, [args.fail_set], entType)
 
     if len(fails) < 1:
         print("No fails to move")
@@ -60,7 +62,7 @@ def main():
     for ent in entTypes:
         print(f"updating table for {ent}")
         entTbl = get_entity_table(ws, ent, s)
-        entTbl.to_csv(f"../data/{ws.name}/{ent}_attributes.tsv", sep='\t', index=False)
+        entTbl.to_csv(SCRIPT_DIR / f"../data/{ws.name}/{ent}_attributes.tsv", sep='\t', index=False)
     
 
     

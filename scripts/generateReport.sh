@@ -25,7 +25,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-python gatherWorkflows.py "$configPath"
+python gatherWorkflows.py -c "$configPath"
 
 # Report generation
 Rscript -e "rmarkdown::run('../notebooks/CostReport.Rmd', shiny_args = list(launch.browser=TRUE))"

@@ -24,6 +24,7 @@ selectInput("workspace", "Select Terra Workspace",
             choices = unique(list.files("../data/")))
 
 mainTbl <- reactive({
+  req(input$workspace)
   fread(paste0("../data/", input$workspace, "/workflowData.tsv"))[
     cost != "N/A",
     .(workflow, workflowId, sample, entityType, cost = as.numeric(cost), costType, status,
@@ -64,7 +65,7 @@ observeEvent(input$workspace, {
 })
 
 # 2. Use a reactive observer to update the choices seamlessly whenever sampleType changes
-observeEvent(input$sampleType, {
+observeEvent(list(input$workspace, input$sampleType, mainTbl()), {
   wfChoices <- unique(mainTbl()[entityType == input$sampleType]$workflow)
   updateCheckboxGroupInput(getDefaultReactiveDomain(), "wfCheck",
     choices = wfChoices,
@@ -298,16 +299,18 @@ renderDataTable({
 ```{r}
 renderPlot({
   tmpTbl <- charrTbl()
-  charrPlts <- lapply(colnames(tmpTbl)[-1], function(col) {
-    ggplot(tmpTbl[, c("#SAMPLE", col), with = F], aes(.data[[col]])) + geom_boxplot() + theme_classic() +
-      scale_x_continuous(labels = function(x) {
-        ifelse(x > 1000, scales::label_scientific()(x), x)
-      }) +
-      xlab("") + 
-      theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) +
-      ggtitle(col)
-  })
-  wrap_plots(charrPlts, nrow = 4)
+  if (nrow(tmpTbl) > 0) {
+    charrPlts <- lapply(colnames(tmpTbl)[-1], function(col) {
+      ggplot(tmpTbl[, c("#SAMPLE", col), with = F], aes(.data[[col]])) + geom_boxplot() + theme_classic() +
+        scale_x_continuous(labels = function(x) {
+          ifelse(x > 1000, scales::label_scientific()(x), x)
+        }) +
+        xlab("") + 
+        theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) +
+        ggtitle(col)
+    })
+    wrap_plots(charrPlts, nrow = 4)
+  }
 })
 
 ```
@@ -330,27 +333,29 @@ renderDataTable({
 
 ```{r}
 renderPlot({
-  ancTbl <- demoTbl()
-  anc_colors <- setNames(
-    scales::hue_pal()(length(unique(ancTbl$ancestry))),
-    unique(ancTbl$ancestry)
-  )
-  
-  ancBar <- ggplot(ancTbl, aes(ancestry, fill = ancestry)) +
-    geom_bar() +
-    xlab("") + 
-    scale_fill_manual(values = anc_colors) +
-    scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
-    theme_classic() +
-    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
-  
-  ancPts <- ggplot(ancTbl, aes(`GD1(x)`, `GD2(y)`, color = ancestry)) +
-    geom_point() +
-    scale_color_manual(values = anc_colors) +
-    theme_classic() +
-    theme(legend.position = "none")
-  
-  ancPts + ancBar
+  if (nrow(demoTbl()) > 0) {
+    ancTbl <- demoTbl()
+    anc_colors <- setNames(
+      scales::hue_pal()(length(unique(ancTbl$ancestry))),
+      unique(ancTbl$ancestry)
+    )
+    
+    ancBar <- ggplot(ancTbl, aes(ancestry, fill = ancestry)) +
+      geom_bar() +
+      xlab("") + 
+      scale_fill_manual(values = anc_colors) +
+      scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+      theme_classic() +
+      theme(axis.ticks.x = element_blank(), axis.text.x = element_blank())
+    
+    ancPts <- ggplot(ancTbl, aes(`GD1(x)`, `GD2(y)`, color = ancestry)) +
+      geom_point() +
+      scale_color_manual(values = anc_colors) +
+      theme_classic() +
+      theme(legend.position = "none")
+    
+    ancPts + ancBar
+  }
 })
 ```
 
@@ -358,6 +363,8 @@ renderPlot({
 
 ```{r}
 renderDataTable({
-  datatable(demoTbl()[,.(count = .N), by = c("chrX_count", "chrY_count")])
+  if (nrow(demoTbl()) > 0) {
+    datatable(demoTbl()[,.(count = .N), by = c("chrX_count", "chrY_count")])
+  }
 })
 ```

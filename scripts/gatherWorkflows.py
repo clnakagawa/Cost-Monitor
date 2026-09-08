@@ -43,7 +43,12 @@ def main():
             entTbl.to_csv(scriptDir / f"../data/{ws.name}/{entType}_attributes.tsv", sep='\t', index=False)
 
         # Get a list of all workspace submissions + metadata
-        subIds = get_submissions(ws, s)
+        newSubTbl = get_submissions(ws, s)
+        subIds = newSubTbl['subId'].tolist()
+
+        # Get list of currently running submission ids, these can't be added to the processed submission list
+        runningSubs = newSubTbl[newSubTbl['status'] == "Submitted"]['subId'].tolist()
+
 
         # check if processed submissions list exists
         hasSubRecord = Path(scriptDir / f"../data/{ws.name}/submission_list.txt").is_file()
@@ -60,11 +65,17 @@ def main():
         # Process each submission individually + add data to workspace table
         wfData = pd.read_table(scriptDir / f"../data/{ws.name}/workflowData.tsv") if hasSubRecord else pd.DataFrame()
         wfData = pd.concat([wfData, get_submission_table(ws, subIds, currentMethods, s)])
+
+        wfData = wfData.sort_values(by="status", ascending=False)
+        wfData = wfData.drop_duplicates(subset=['workflowId', 'sample'])
+
         wfData.to_csv(scriptDir / f"../data/{ws.name}/workflowData.tsv", sep = '\t')
+
+        # get list of running submission ids
 
         # If submissions are processed without error, write/append to record
         with open(scriptDir / f"../data/{ws.name}/submission_list.txt", 'a' if hasSubRecord else 'w') as f:
-            f.write("\n".join(subIds))
+            f.write("\n".join([id for id in subIds if id not in runningSubs]))
 
         # storage cost estimates
         get_storage_cost_table(ws, s).to_csv(scriptDir / f"../data/{ws.name}/StorageEstimate.tsv", sep = '\t')

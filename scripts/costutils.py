@@ -48,7 +48,7 @@ def get_entity_table(ws, entType, s):
 # get all submissions for a workspace
 def get_submissions(ws, s):
     response = s.get(f"{BASE_URL}/workspaces/{ws.namespace}/{ws.name}/submissions")
-    # return([sub['submissionId'] for sub in response.json()])
+    return(pd.concat([pd.DataFrame([[sub['submissionId'], sub['status']]], columns = ['subId', 'status'])for sub in response.json()]))
     return([sub['submissionId'] for sub in response.json() if sub['status'] in ["Done", "Aborted"]])
 
 def get_methods(ws, s):

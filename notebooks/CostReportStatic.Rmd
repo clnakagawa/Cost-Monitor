@@ -1,10 +1,10 @@
 ---
-title: "Workflow Cost Report `r Sys.Date()`"
+title: "Workflow Cost Report `r Sys.Date()`" 
 data: "`r Sys.Date()`"
 output: flexdashboard::flex_dashboard
 params:
-  workspace: !r unique(list.files("../data"))[1]
-  sampleType: !r read.table(paste0("../data/", unique(list.files("../data"))[1], "/workflowData.tsv"), header = T, sep='\t')$entityType[1]
+  workspace: "../data/CGL_VAL-TCGA_germline_WGS-Others1"
+  sampleType: "tcga"
 ---
 
 ```{r global, include=FALSE}
@@ -22,6 +22,7 @@ library(patchwork)
 
 
 ```
+
 
 
 ```{r loading_data}
@@ -44,7 +45,11 @@ if (file.exists(demoPath)) {
 }
 ```
 
-# Current Sample Status
+# Sidebar {.sidebar}
+
+[Workspace List](../index.html)
+
+# Current Sample Status 
 
 ## Column 1 {data-width="300"}
 
@@ -225,7 +230,8 @@ sizeUnit <- "TB"
 
 
 liveCost <- round(storData$`usage.live-object`[1] / sizeFactor, 2)
-softCost <- round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2)
+softCost <- ifelse("usage.soft-deleted-object" %in% colnames(storData), round(storData$`usage.soft-deleted-object`[1] / sizeFactor, 2), 0) 
+
 if (liveCost + softCost > 0) {
   pie(c(liveCost, softCost),
     labels = c(paste0(liveCost, sizeUnit, " (Live)"),
@@ -316,3 +322,4 @@ if (nrow(demoTbl) > 0) {
   datatable(demoTbl[,.(count = .N), by = c("chrX_count", "chrY_count")])
 }
 ```
+

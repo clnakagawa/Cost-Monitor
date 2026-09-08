@@ -16,6 +16,7 @@ def main():
     args = parser.parse_args()
     ws = Workspace(args.workspace.split('/')[0], args.workspace.split('/')[1])
 
+    # TODO: Handle if no set table exists
     setTblPath=scriptDir / f"../data/{ws.name}/{args.entity_type}_set_attributes.tsv"
     entTblPath=scriptDir / f"../data/{ws.name}/{args.entity_type}_attributes.tsv"
     prefix = args.prefix if args.prefix != "" else ws.name.split('-')[-1]
@@ -25,13 +26,16 @@ def main():
     retries = Retry(total=5, backoff_factor=1, status_forcelist=[ 502, 503, 504 ])
     s.mount('http://', HTTPAdapter(max_retries=retries))
 
+    setTblExist = Path(setTblPath).is_file()
+    print(setTblExist)
+
     # number of existing sets
-    setTbl = pd.read_csv(setTblPath, sep='\t')
+    setTbl = pd.read_csv(setTblPath, sep='\t') if setTblExist else pd.DataFrame(columns=['name'])
     # doesn't count failure set (assumes failure set name !includes 'set')
     numOldSets=sum(1 for setname in setTbl['name'] if 'set' in setname) 
 
     # list of entity names already added to sets
-    setEnts = get_assigned_entities(setTblPath, args.entity_type)
+    setEnts = get_assigned_entities(setTblPath, args.entity_type) if setTblExist else []
 
     # list of all entities
     allEnts = list(pd.read_csv(entTblPath, sep='\t')['name'])

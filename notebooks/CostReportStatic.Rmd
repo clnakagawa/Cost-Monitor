@@ -251,7 +251,16 @@ if (liveCost + softCost > 0) {
 ### Charr QC Table
 
 ```{r}
-datatable(charrTbl)
+datatable(
+  charrTbl,
+  filter = list(position = "top", clear = FALSE, plain = TRUE),
+  extensions = "Buttons",
+  options = list(
+    searching = TRUE,
+    dom = "Bfrtip",
+    buttons = c("csv")
+  )
+)
 ```
 
 ## Column 2 {data-width=400}

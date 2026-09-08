@@ -288,7 +288,16 @@ renderPlot({
 
 ```{r}
 renderDataTable({
-  datatable(charrTbl())
+  datatable(
+    charrTbl(),
+    filter = list(position = "top", clear = FALSE, plain = TRUE),
+    extensions = "Buttons",
+    options = list(
+      searching = TRUE,
+      dom = "Bfrtip",
+      buttons = c("csv")
+    )
+  )
 })
 ```
 

@@ -4,6 +4,7 @@ from costutils import *
 import argparse
 
 def main():
+    scriptDir = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Script to add sample sets to a workspace")
     parser.add_argument('workspace', help="Name of the workspace to edit formatted as <namespace>/<name>")
     parser.add_argument('entity_type', help="Name of the entity type for sets to add")
@@ -15,8 +16,8 @@ def main():
     args = parser.parse_args()
     ws = Workspace(args.workspace.split('/')[0], args.workspace.split('/')[1])
 
-    setTblPath=f"../data/{ws.name}/{args.entity_type}_set_attributes.tsv"
-    entTblPath=f"../data/{ws.name}/{args.entity_type}_attributes.tsv"
+    setTblPath=scriptDir / f"../data/{ws.name}/{args.entity_type}_set_attributes.tsv"
+    entTblPath=scriptDir / f"../data/{ws.name}/{args.entity_type}_attributes.tsv"
     prefix = args.prefix if args.prefix != "" else ws.name.split('-')[-1]
 
     # setup api session

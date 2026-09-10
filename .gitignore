@@ -9,3 +9,4 @@ venv
 plots
 scripts/__pycache__
 scripts/makeReports.sh
+scripts/allQC.sh

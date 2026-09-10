@@ -47,7 +47,9 @@ if (file.exists(demoPath)) {
 
 # Sidebar {.sidebar}
 
-[Workspace List](../index.html)
+Current Workspace: `r params$workspace`
+
+[Return to workspace List](../index.html)
 
 # Current Sample Status 
 
@@ -258,7 +260,10 @@ datatable(
   options = list(
     searching = TRUE,
     dom = "Bfrtip",
-    buttons = c("csv")
+    buttons = list(list(extend = "csv",
+                        text = "Download Filtered Data",
+                        filename = "charr_table",
+                        exportOptions = list(modifier = list(page = "all"))))
   )
 )
 ```

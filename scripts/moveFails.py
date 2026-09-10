@@ -23,7 +23,8 @@ def main():
 
     # get list of fails for the specified submission
     subTbl = json_to_table(response.json())  
-    fails = subTbl[subTbl['status'].isin(["Failed", "Aborted"])]['sample']
+    print(subTbl[['sample', 'status']][subTbl['status'] != "Succeeded"])
+    fails = subTbl[subTbl['status'].isin(["Failed", "Aborted", "Aborting"])]['sample']
     entType = subTbl['entityType'][1]
 
     SCRIPT_DIR = Path(__file__).resolve().parent

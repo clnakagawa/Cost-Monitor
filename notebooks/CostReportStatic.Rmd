@@ -43,6 +43,14 @@ demoPath <- paste0("../data/", params$workspace, "/", params$sampleType, "_demo.
 if (file.exists(demoPath)) {
   demoTbl <- fread(demoPath)
 }
+
+flagTbl <- data.table()
+flagPath <- paste0("../data/", params$workspace, "/", params$sampleType, "_flag.tsv")
+if (file.exists(flagPath)) {
+  flagTbl <- fread(flagPath)[,c(1:10,13:17)]
+  catCols <- colnames(flagTbl)[3:15]
+  flagTbl[, (catCols) := lapply(.SD, function(col) round(col / total_pass, 3)), .SDcols = catCols]
+} 
 ```
 
 # Sidebar {.sidebar}
@@ -337,3 +345,37 @@ if (nrow(demoTbl) > 0) {
 }
 ```
 
+
+# Flagstat QC
+
+## Column 1
+
+### Flagstat QC Metrics
+
+```{r}
+datatable(
+  flagTbl,
+  filter = list(position = "top", clear = FALSE, plain = TRUE),
+  extensions = "Buttons",
+  options = list(
+    searching = TRUE,
+    dom = "Bfrtip",
+    buttons = list(list(extend = "csv",
+                        text = "Download Filtered Data",
+                        filename = "charr_table",
+                        exportOptions = list(modifier = list(page = "all"))))
+  ))
+
+```
+
+### Plots
+
+```{r, fig.width = 18, fig.height = 3}
+pltTbl <- flagTbl
+if (ncol(pltTbl) > 1) {
+  flagPlts <- lapply(colnames(pltTbl)[c(3,5:15)], function(cat) {
+    ggplot(pltTbl, aes(.data[[cat]])) + geom_boxplot() + theme_classic() + ggtitle(cat)
+  })
+  wrap_plots(flagPlts, nrow = 2)
+}
+```

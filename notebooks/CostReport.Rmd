@@ -57,6 +57,18 @@ demoTbl <- reactive({
   }
 })
 
+flagTbl <- reactive({
+  flagPath <- paste0("../data/", input$workspace, "/", input$sampleType, "_flag.tsv")
+  if (file.exists(flagPath)) {
+    tmp <- fread(flagPath)[,c(1:17)]
+    catCols <- colnames(tmp)[3:17]
+    tmp[, (catCols) := lapply(.SD, function(col) round(col / total_pass, 3)), .SDcols = catCols]
+    tmp
+  } else {
+    data.table()
+  }
+})
+
 # need renderUI bc depends on selected workspace
 observeEvent(input$workspace, {
   updateSelectInput(getDefaultReactiveDomain(), "sampleType",
@@ -280,7 +292,7 @@ renderPlot({
 })
 ```
 
-# QC Stats
+# CHARR Stats
 
 ## Column 1
 
@@ -375,5 +387,62 @@ renderDataTable({
   if (nrow(demoTbl()) > 0) {
     datatable(demoTbl()[,.(count = .N), by = c("chrX_count", "chrY_count")])
   }
+})
+```
+
+# Flagstat
+
+## Column 1
+
+### Flagstat QC Metrics
+
+```{r}
+renderDataTable({
+  datatable(flagTbl())
+})
+
+```
+
+### Plots
+
+```{r}
+renderPlot({
+  pltTbl <- flagTbl()
+  if (ncol(pltTbl) > 1) {
+    flagPlts <- lapply(colnames(pltTbl)[c(3,5:17)], function(cat) {
+      ggplot(pltTbl, aes(.data[[cat]])) + geom_boxplot() + theme_classic() + ggtitle(cat)
+    })
+    wrap_plots(flagPlts, nrow = 2)
+  }
+})
+```
+
+# QC
+
+## Column 1
+
+### gVCF Size Fails
+
+```{r}
+
+```
+
+## Column 2
+
+### CHARR Fails 
+
+```{r}
+renderDataTable({
+  datatable(charrTbl()[CHARR >= 0.02, .(sample = `#SAMPLE`, CHARR)])
+})
+```
+
+## Column 3
+
+### Flagstat Fails
+
+```{r}
+renderDataTable({
+  datatable(flagTbl()[discordant_mapq5_pass >= 0.025, c("sample", "discordant_mapq5_pass")])
 })
 ```

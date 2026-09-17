@@ -57,6 +57,15 @@ demoTbl <- reactive({
   }
 })
 
+gvcfTbl <- reactive({
+  gvcfPath <- paste0("../data/", input$workspace, "/", input$sampleType, "_gvcf_sizes.tsv")
+  if (file.exists(gvcfPath)) {
+    fread(gvcfPath, col.names = c("sample", "size", "path"), fill = T)[,.(sample, sizeGB = size / 1000000000)]
+  } else {
+    data.table()
+  }
+})
+
 flagTbl <- reactive({
   flagPath <- paste0("../data/", input$workspace, "/", input$sampleType, "_flag.tsv")
   if (file.exists(flagPath)) {
@@ -424,7 +433,11 @@ renderPlot({
 ### gVCF Size Fails
 
 ```{r}
-
+renderDataTable({
+  if (ncol(gvcfTbl()) > 1) {
+    datatable(gvcfTbl()[sizeGB >= 20])
+  }
+})
 ```
 
 ## Column 2
@@ -433,7 +446,10 @@ renderPlot({
 
 ```{r}
 renderDataTable({
-  datatable(charrTbl()[CHARR >= 0.02, .(sample = `#SAMPLE`, CHARR)])
+  tbl <- charrTbl()
+  if (ncol(tbl) > 1) {
+    datatable(tbl[CHARR >= 0.02, .(sample = `#SAMPLE`, CHARR)])
+  }
 })
 ```
 
@@ -443,6 +459,9 @@ renderDataTable({
 
 ```{r}
 renderDataTable({
-  datatable(flagTbl()[discordant_mapq5_pass >= 0.025, c("sample", "discordant_mapq5_pass")])
+  tbl <- flagTbl()
+  if (ncol(tbl) > 1) {
+    datatable(tbl[discordant_mapq5_pass >= 0.025, c("sample", "discordant_mapq5_pass")])
+  }
 })
 ```

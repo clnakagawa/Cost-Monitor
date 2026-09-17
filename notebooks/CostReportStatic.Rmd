@@ -3,7 +3,7 @@ title: "Workflow Cost Report `r Sys.Date()`"
 data: "`r Sys.Date()`"
 output: flexdashboard::flex_dashboard
 params:
-  workspace: "../data/CGL_VAL-TCGA_germline_WGS-Others1"
+  workspace: "../data/CGL_VAL-TCGA_germline_WGS-BRCA"
   sampleType: "tcga"
 ---
 
@@ -51,6 +51,12 @@ if (file.exists(flagPath)) {
   catCols <- colnames(flagTbl)[3:15]
   flagTbl[, (catCols) := lapply(.SD, function(col) round(col / total_pass, 3)), .SDcols = catCols]
 } 
+
+gvcfTbl <- data.table()
+gvcfPath <- paste0("../data/", params$workspace, "/", params$sampleType, "_gvcf_sizes.tsv")
+if (file.exists(gvcfPath)) {
+  gvcfTbl <- fread(cmd = paste0("grep 'gs://' ", gvcfPath), col.names = c("sample", "size", "path"), fill = T)[,.(sample, sizeGB = size / 1000000000)]
+}
 ```
 
 # Sidebar {.sidebar}
@@ -254,7 +260,7 @@ if (liveCost + softCost > 0) {
 
 ```
 
-# QC Stats
+# CHARR Stats
 
 ## Column 1 {data-width=600}
 
@@ -378,4 +384,79 @@ if (ncol(pltTbl) > 1) {
   })
   wrap_plots(flagPlts, nrow = 2)
 }
+```
+
+
+# QC
+
+## Column 1
+
+### gVCF Size Fails
+
+Samples with gVCF size > 20GB. \
+Note that this list may not be complete if gVCFs were removed before they were recorded
+
+```{r}
+if (ncol(gvcfTbl) > 1) {
+  datatable(gvcfTbl[sizeGB >= 20],
+  filter = list(position = "top", clear = FALSE, plain = TRUE),
+  extensions = "Buttons",
+  options = list(
+    searching = TRUE,
+    dom = "Bfrtip",
+    buttons = list(list(extend = "csv",
+                        text = "Download Filtered Data",
+                        filename = "charr_table",
+                        exportOptions = list(modifier = list(page = "all"))))
+  ))
+}
+
+```
+
+## Column 2
+
+### CHARR Fails 
+
+Samples with CHARR > 0.02
+
+```{r}
+
+if (ncol(charrTbl) > 1) {
+  datatable(charrTbl[CHARR >= 0.02, .(sample = `#SAMPLE`, CHARR)],
+  filter = list(position = "top", clear = FALSE, plain = TRUE),
+  extensions = "Buttons",
+  options = list(
+    searching = TRUE,
+    dom = "Bfrtip",
+    buttons = list(list(extend = "csv",
+                        text = "Download Filtered Data",
+                        filename = "charr_table",
+                        exportOptions = list(modifier = list(page = "all"))))
+  ))
+}
+
+```
+
+## Column 3
+
+### Flagstat Fails
+
+Samples with Proportion of MAPQ>5 discordant reads > 0.025
+
+```{r}
+
+if (ncol(flagTbl) > 1) {
+  datatable(flagTbl[discordant_mapq5_pass >= 0.025, c("sample", "discordant_mapq5_pass")],
+  filter = list(position = "top", clear = FALSE, plain = TRUE),
+  extensions = "Buttons",
+  options = list(
+    searching = TRUE,
+    dom = "Bfrtip",
+    buttons = list(list(extend = "csv",
+                        text = "Download Filtered Data",
+                        filename = "charr_table",
+                        exportOptions = list(modifier = list(page = "all"))))
+  ))
+}
+
 ```

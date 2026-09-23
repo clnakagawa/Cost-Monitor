@@ -130,4 +130,13 @@ def set_table_dict(setTblPath, entType):
     for index, row in tbl.iterrows():
         for ent in re.findall("(?<=Name': ').*?(?='})", row[f"attributes.{entType}s.items"]):
             entDict[ent] = row['name']
-    return(entDict)
+    return(entDict) 
+
+# make DataFrame object from sample_Set attribute table
+def set_table_df(setTblPath, entType):
+    tbl = pd.read_csv(setTblPath, sep='\t')
+    rows = []
+    for index, row in tbl.iterrows():
+        for ent in re.findall("(?<=Name': ').*?(?='})", row[f"attributes.{entType}s.items"]):
+            rows.append(pd.DataFrame([{'name' : ent, 'set' : row['name']}]))
+    return(pd.concat(rows))

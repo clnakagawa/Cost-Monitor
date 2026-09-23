@@ -57,6 +57,12 @@ gvcfPath <- paste0("../data/", params$workspace, "/", params$sampleType, "_gvcf_
 if (file.exists(gvcfPath)) {
   gvcfTbl <- fread(cmd = paste0("grep 'gs://' ", gvcfPath), col.names = c("sample", "size", "path"), fill = T)[,.(sample, sizeGB = size / 1000000000)]
 }
+
+memberTbl <- data.table()
+memberPath <- paste0("../data/", params$workspace, "/", params$sampleType, "_set_membership.tsv")
+if (file.exists(memberPath)) {
+  memberTbl <- fread(memberPath)[,.(set = paste0(set, collapse=', ')), by = name]
+}
 ```
 
 # Sidebar {.sidebar}
@@ -391,22 +397,19 @@ if (ncol(pltTbl) > 1) {
 
 ## Column 1
 
-### gVCF Size Fails
-
-Samples with gVCF size > 20GB. \
-Note that this list may not be complete if gVCFs were removed before they were recorded
+### gVCF Size Fails {data-height=500}
 
 ```{r}
 if (ncol(gvcfTbl) > 1) {
-  datatable(gvcfTbl[sizeGB >= 20],
+  datatable(gvcfTbl[sizeGB >= 20][memberTbl, on = c("sample" = "name"), nomatch = 0],
   filter = list(position = "top", clear = FALSE, plain = TRUE),
   extensions = "Buttons",
   options = list(
     searching = TRUE,
     dom = "Bfrtip",
     buttons = list(list(extend = "csv",
-                        text = "Download Filtered Data",
-                        filename = "charr_table",
+                        text = "Download",
+                        filename = "gvcf_qc_fails",
                         exportOptions = list(modifier = list(page = "all"))))
   ))
 }
@@ -415,22 +418,20 @@ if (ncol(gvcfTbl) > 1) {
 
 ## Column 2
 
-### CHARR Fails 
-
-Samples with CHARR > 0.02
+### CHARR Fails
 
 ```{r}
 
 if (ncol(charrTbl) > 1) {
-  datatable(charrTbl[CHARR >= 0.02, .(sample = `#SAMPLE`, CHARR)],
+  datatable(charrTbl[CHARR >= 0.02, .(sample = `#SAMPLE`, CHARR)][memberTbl, on = c("sample" = "name"), nomatch = 0],
   filter = list(position = "top", clear = FALSE, plain = TRUE),
   extensions = "Buttons",
   options = list(
     searching = TRUE,
     dom = "Bfrtip",
     buttons = list(list(extend = "csv",
-                        text = "Download Filtered Data",
-                        filename = "charr_table",
+                        text = "Download",
+                        filename = "charr_qc_fails",
                         exportOptions = list(modifier = list(page = "all"))))
   ))
 }
@@ -441,20 +442,18 @@ if (ncol(charrTbl) > 1) {
 
 ### Flagstat Fails
 
-Samples with Proportion of MAPQ>5 discordant reads > 0.025
-
 ```{r}
 
 if (ncol(flagTbl) > 1) {
-  datatable(flagTbl[discordant_mapq5_pass >= 0.025, c("sample", "discordant_mapq5_pass")],
+  datatable(flagTbl[discordant_mapq5_pass >= 0.025, c("sample", "discordant_mapq5_pass")][memberTbl, on = c("sample" = "name"), nomatch = 0],
   filter = list(position = "top", clear = FALSE, plain = TRUE),
   extensions = "Buttons",
   options = list(
     searching = TRUE,
     dom = "Bfrtip",
     buttons = list(list(extend = "csv",
-                        text = "Download Filtered Data",
-                        filename = "charr_table",
+                        text = "Download",
+                        filename = "flagstat_qc_fails",
                         exportOptions = list(modifier = list(page = "all"))))
   ))
 }

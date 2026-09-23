@@ -2,9 +2,8 @@
 
 import pandas as pd
 import argparse
-import seaborn as sns
+from costutils import *
 from pathlib import Path
-import matplotlib.pyplot as plt
 import sys
 
 def load_flagstat(sid,flagPath):
@@ -107,6 +106,10 @@ def main():
 
     else:
         print("flagstat field not found in table columns")
+
+    # make set membership table
+    setTbl = set_table_df(scriptDir / f"../data/{args.workspace}/{args.entType}_set_attributes.tsv", args.entType)
+    setTbl.to_csv(scriptDir / f"../data/{args.workspace}/{args.entType}_set_membership.tsv", sep='\t', index=False)
 
 if __name__ == "__main__":
     main()

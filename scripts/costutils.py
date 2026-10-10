@@ -5,6 +5,7 @@ import re
 import requests
 from requests.adapters import HTTPAdapter, Retry
 import pandas as pd
+import numpy as np
 import sys
 import google.auth
 from google.auth.transport.requests import Request
@@ -128,15 +129,19 @@ def set_table_dict(setTblPath, entType):
     tbl = pd.read_csv(setTblPath, sep='\t')
     entDict = {}
     for index, row in tbl.iterrows():
-        for ent in re.findall("(?<=Name': ').*?(?='})", row[f"attributes.{entType}s.items"]):
-            entDict[ent] = row['name']
+        if isinstance(row[f"attributes.{entType}s.items"], str):
+            for ent in re.findall("(?<=Name': ').*?(?='})", row[f"attributes.{entType}s.items"]):
+                entDict[ent] = row['name']
     return(entDict) 
 
 # make DataFrame object from sample_Set attribute table
 def set_table_df(setTblPath, entType):
     tbl = pd.read_csv(setTblPath, sep='\t')
     rows = []
+    if f"attributes.{entType}s.items" not in tbl.columns:
+        return(pd.DataFrame())
     for index, row in tbl.iterrows():
-        for ent in re.findall("(?<=Name': ').*?(?='})", row[f"attributes.{entType}s.items"]):
-            rows.append(pd.DataFrame([{'name' : ent, 'set' : row['name']}]))
+        if isinstance(row[f"attributes.{entType}s.items"], str):
+            for ent in re.findall("(?<=Name': ').*?(?='})", row[f"attributes.{entType}s.items"]):
+                rows.append(pd.DataFrame([{'name' : ent, 'set' : row['name']}]))
     return(pd.concat(rows))

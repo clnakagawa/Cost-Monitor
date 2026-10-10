@@ -109,7 +109,11 @@ def main():
 
     # make set membership table
     setTbl = set_table_df(scriptDir / f"../data/{args.workspace}/{args.entType}_set_attributes.tsv", args.entType)
-    setTbl.to_csv(scriptDir / f"../data/{args.workspace}/{args.entType}_set_membership.tsv", sep='\t', index=False)
+    if not len(setTbl):
+        print(f"No sample sets foudn for {args.workspace}")
+    else:
+        setTbl.to_csv(scriptDir / f"../data/{args.workspace}/{args.entType}_set_membership.tsv", sep='\t', index=False)
+        print("added set membership table")
 
 if __name__ == "__main__":
     main()
